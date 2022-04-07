@@ -1,0 +1,24 @@
+{
+  "version": "1.0.0",
+  "distribution": "v23",
+  "active_version": "20220210",
+  "cache_dir": "/.osrepo-cache",
+  "max_repo_retention": 3,
+  "repo_list": [
+    {
+      "repo": "/persistent/osroot/repo",
+      "stage_dir": "/persistent/osroot/cache",
+      "snapshot_dir": "/persistent/osroot/snapshot",
+      "subscribe_list": [
+        "/boot",
+        "/usr",
+        "/etc",
+        "/var/lib/apt",
+        "/var/lib/dkms",
+        "/var/lib/dpkg",
+        "/var/lib/man-db",
+        "/var/lib/initramfs-tools"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+#!/usr/bin/make -f
+
+export GOCACHE := /tmp/gocache
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+%:
+	dh $@
+
+override_dh_dwz:

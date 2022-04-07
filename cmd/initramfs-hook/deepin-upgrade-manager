@@ -1,0 +1,25 @@
+#!/bin/bash
+
+set -e
+
+PREREQ=""
+
+prereqs()
+{
+    echo "${PREREQ}"
+}
+
+case "${1}" in
+    prepare)
+        prereqs
+        exit 0
+        ;;
+esac
+
+. /usr/share/initramfs-tools/hook-functions
+
+UPGRADER="/usr/sbin/deepin-upgrade-manager"
+if [ -x ${UPGRADER} ]
+then
+    copy_exec ${UPGRADER} /usr/sbin
+fi

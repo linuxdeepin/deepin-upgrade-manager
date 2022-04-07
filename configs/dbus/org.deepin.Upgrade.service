@@ -1,0 +1,5 @@
+[D-BUS Service]
+Name=org.deepin.Upgrade
+Exec=/usr/sbin/deepin-upgrade-manager
+User=root
+

@@ -1,0 +1,37 @@
+deepin-upgrade-manager (1.1.0) unstable; urgency=medium
+
+  * Refactor upgrade manager
+
+ -- Bowen Yan <yanbowen@uniontech.com>  Fri, 18 Jan 2022 14:24:03 +0800
+
+deepin-upgrade-manager (1.0.4) unstable; urgency=medium
+
+  * Process the '/etc' directory independently
+  * Add repo ref prefix
+  * Remove 'upgrade state'
+
+ -- Bowen Yan <yanbowen@uniontech.com>  Thu, 30 Dec 2021 11:24:03 +0800
+
+deepin-upgrade-manager (1.0.3) unstable; urgency=medium
+
+  * Add dbus signal for 'Install/Rollback'
+  * Add request body checker
+  * Add docs for 'remote repo build'
+
+ -- Bowen Yan <yanbowen@uniontech.com>  Fri, 24 Dec 2021 15:24:03 +0800
+
+deepin-upgrade-manager (1.0.2) unstable; urgency=medium
+
+  * Add docs for usage & FHS
+  * Add total in checking
+  * Fix grub update failure because of deepin-os-combiner abnormal
+
+ -- Bowen Yan <yanbowen@uniontech.com>  Wed, 22 Dec 2021 17:24:03 +0800
+
+deepin-upgrade-manager (1.0.1) unstable; urgency=medium
+
+  * Add grub menu generator
+  * Add initramfs hook for 'deepin-os-combiner'
+  * Correct Makefile
+
+ -- Bowen Yan <yanbowen@uniontech.com>  Mon, 20 Dec 2021 15:24:03 +0800
