@@ -32,6 +32,15 @@ func (infos MountInfoList) Query(dir string) MountInfoList {
 	return list
 }
 
+func (infos MountInfoList) Match(dir string) *MountInfo {
+	for _, info := range infos {
+		if info.MountPoint == dir {
+			return info
+		}
+	}
+	return nil
+}
+
 func Load(filename string) (MountInfoList, error) {
 	fr, err := os.Open(filename)
 	if err != nil {

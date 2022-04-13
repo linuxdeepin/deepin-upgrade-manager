@@ -4,6 +4,7 @@ import (
 	"deepin-upgrade-manager/pkg/config"
 	"deepin-upgrade-manager/pkg/logger"
 	"deepin-upgrade-manager/pkg/module/dirinfo"
+	"deepin-upgrade-manager/pkg/module/fstabinfo"
 	"deepin-upgrade-manager/pkg/module/mountinfo"
 	"deepin-upgrade-manager/pkg/module/mountpoint"
 	"deepin-upgrade-manager/pkg/module/repo"
@@ -88,7 +89,6 @@ func (c *Upgrader) Rollback(version string) error {
 		if err != nil {
 			return err
 		}
-
 	}
 	return nil
 }
@@ -129,6 +129,14 @@ func (c *Upgrader) repoSnapshot(repoConf *config.RepoConfig, version string,
 	}
 	if !bootEnabled {
 		return nil
+	}
+	err = c.updataLocalMount(dataDir)
+	if err != nil {
+		logger.Warning("the fstab file does not exist in the snapshot, read the local fstabl.")
+		err = c.updataLocalMount("/")
+		if err != nil {
+			return err
+		}
 	}
 	return c.enableSnapshotBoot(dataDir, version)
 }
@@ -322,4 +330,56 @@ func (c *Upgrader) isDirSpaceEnough(rootDir string, subscribeList []string) (boo
 		return false, errors.New("the current partition is out of space")
 	}
 	return true, nil
+}
+
+func (c *Upgrader) updataLocalMount(snapDir string) error {
+	fsFilePath := filepath.Join(snapDir, "etc/fstab")
+	_, err := ioutil.ReadFile(fsFilePath)
+	if err != nil {
+		return err
+	}
+	fsInfo, err := fstabinfo.Load(fsFilePath, c.rootMP)
+	if err != nil {
+		return err
+	}
+	for _, info := range fsInfo {
+		logger.Debugf("get %s mount information, partition:%s,point:%s", fsFilePath, info.Partition, info.MountPoint)
+		m := c.mountInfos.Match(info.MountPoint)
+		if m != nil {
+			if m.Partition != info.Partition {
+				logger.Infof("the %s is not mounted correctly and needs to be remounted", m.MountPoint)
+				newInfo := &mountpoint.MountPoint{
+					Src:     m.Partition,
+					Dest:    m.MountPoint,
+					FSType:  m.FSType,
+					Options: m.Options,
+				}
+				err := newInfo.Umount()
+				if err != nil {
+					return err
+				}
+				err = os.RemoveAll(newInfo.Dest)
+				if err != nil {
+					return err
+				}
+			} else {
+				continue
+			}
+		}
+		oldInfo := &mountpoint.MountPoint{
+			Src:     info.Partition,
+			Dest:    info.MountPoint,
+			FSType:  info.FSType,
+			Options: info.Options,
+		}
+		err := oldInfo.Mount()
+		if err != nil {
+			err = oldInfo.Umount()
+			if err != nil {
+				logger.Error("[updataLocalMount] umount:", err)
+			}
+			return err
+		}
+	}
+	return nil
 }
