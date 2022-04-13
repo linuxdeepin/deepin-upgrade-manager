@@ -1,6 +1,7 @@
 package util
 
 import (
+	"bytes"
 	"crypto/md5"
 	"crypto/rand"
 	"deepin-upgrade-manager/pkg/logger"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -47,7 +49,7 @@ func MakeRandomString(num int) string {
 	return string(data)
 }
 
-func ExecCommand(action string, args []string) error {
+func execC(action string, args []string) (io.ReadCloser, error) {
 	var cmd *exec.Cmd
 	if len(args) != 0 {
 		cmd = exec.Command(action, args...)
@@ -57,13 +59,41 @@ func ExecCommand(action string, args []string) error {
 	stdout, err := cmd.StdoutPipe()
 	cmd.Stderr = cmd.Stdout
 	if err != nil {
-		return err
+		return nil, err
 	}
 	err = cmd.Start()
 	if err != nil {
+		return nil, err
+	}
+	return stdout, nil
+}
+
+func ExecCommandWithOut(action string, args []string) ([]byte, error) {
+	var out []byte
+	stdout, err := execC(action, args)
+	if err != nil {
+		return out, err
+	}
+	for {
+		var buffer bytes.Buffer
+		buf := make([]byte, 1024)
+		_, err = stdout.Read(buf)
+		if err != nil {
+			break
+		}
+		buffer.Write(out)
+		buffer.Write(buf)
+		out = buffer.Bytes()
+	}
+	return out, nil
+}
+
+func ExecCommand(action string, args []string) error {
+
+	stdout, err := execC(action, args)
+	if err != nil {
 		return err
 	}
-
 	for {
 		buf := make([]byte, 1024)
 		_, err = stdout.Read(buf)
@@ -178,7 +208,7 @@ func Symlink(src, dst string) error {
 	return os.Symlink(origin, dst)
 }
 
-func CopyDir(src, dst string, enableHardlink bool) error {
+func CopyDir(src, dst, dataDir string, enableHardlink bool) error {
 	sfi, err := os.Stat(src)
 	if err != nil {
 		return err
@@ -193,6 +223,11 @@ func CopyDir(src, dst string, enableHardlink bool) error {
 	if err != nil {
 		return err
 	}
+	if strings.HasPrefix(src, dataDir) {
+		logger.Debugf("ignore data dir:%s", src)
+		return nil
+	}
+
 	for _, fi := range fiList {
 		srcSub := filepath.Join(src, fi.Name())
 		dstSub := filepath.Join(dst, fi.Name())
@@ -209,7 +244,7 @@ func CopyDir(src, dst string, enableHardlink bool) error {
 			logger.Debug("[CopyDir] will remove(char):", dstSub)
 			err = os.RemoveAll(dstSub)
 		case fiStat.Mode&syscall.S_IFDIR == syscall.S_IFDIR:
-			err = CopyDir(srcSub, dstSub, enableHardlink)
+			err = CopyDir(srcSub, dstSub, dataDir, enableHardlink)
 		case fiStat.Mode&syscall.S_IFREG == syscall.S_IFREG:
 			err = CopyFile2(srcSub, dstSub, sfi, enableHardlink)
 		default:

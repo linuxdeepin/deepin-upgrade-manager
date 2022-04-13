@@ -3,10 +3,12 @@ package upgrader
 import (
 	"deepin-upgrade-manager/pkg/config"
 	"deepin-upgrade-manager/pkg/logger"
+	"deepin-upgrade-manager/pkg/module/dirinfo"
 	"deepin-upgrade-manager/pkg/module/mountinfo"
 	"deepin-upgrade-manager/pkg/module/mountpoint"
 	"deepin-upgrade-manager/pkg/module/repo"
 	"deepin-upgrade-manager/pkg/module/util"
+	"errors"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -96,7 +98,14 @@ func (c *Upgrader) repoCommit(repoConf *config.RepoConfig, newVersion, subject s
 	handler := c.repoSet[repoConf.Repo]
 	dataDir := filepath.Join(c.rootMP, c.conf.CacheDir, c.conf.Distribution)
 	if useSysData {
-		err := c.copyRepoData(c.rootMP, dataDir, repoConf.SubscribeList)
+		isEnough, err := c.isDirSpaceEnough(c.rootMP, repoConf.SubscribeList)
+		if err != nil {
+			return err
+		}
+		if !isEnough {
+			return err
+		}
+		err = c.copyRepoData(c.rootMP, dataDir, repoConf.SubscribeList)
 		if err != nil {
 			return err
 		}
@@ -170,7 +179,7 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 	snapDir := filepath.Join(c.rootMP, repoConf.SnapshotDir, version)
 	dstDir := filepath.Join(c.rootMP, repoConf.StageDir, c.conf.Distribution)
 	tmpDir := dstDir + "-" + util.MakeRandomString(util.MinRandomLen)
-	err := util.CopyDir(snapDir, tmpDir, true)
+	err := util.CopyDir(snapDir, tmpDir, c.conf.CacheDir, true)
 	if err != nil {
 		return err
 	}
@@ -225,7 +234,7 @@ func (c *Upgrader) copyRepoData(rootDir, dataDir string,
 			logger.Info("[copyRepoData] src dir empty:", srcDir)
 			continue
 		}
-		err := util.CopyDir(srcDir, filepath.Join(dataDir, dir), true)
+		err := util.CopyDir(srcDir, filepath.Join(dataDir, dir), dataDir, true)
 		if err != nil {
 			return err
 		}
@@ -279,4 +288,38 @@ func (c *Upgrader) umountAndRemoveDir(dir string) error {
 		return err
 	}
 	return os.RemoveAll(dir)
+}
+
+func (c *Upgrader) isDirSpaceEnough(rootDir string, subscribeList []string) (bool, error) {
+	var needSize int64
+	usrDir := filepath.Join(rootDir, "usr")
+	usrPart, err := dirinfo.GetDirPartition(usrDir)
+	logger.Debugf("the dir is:%s, the partiton is:%s", usrDir, usrPart)
+	if err != nil {
+		return false, err
+	}
+	for _, dir := range subscribeList {
+		srcDir := filepath.Join(rootDir, dir)
+		part, err := dirinfo.GetDirPartition(srcDir)
+		logger.Debugf("the dir is:%s, the partiton is:%s", srcDir, part)
+		if err != nil {
+			continue
+		}
+		if !util.IsExists(srcDir) {
+			continue
+		}
+		if part == usrPart {
+			continue
+		}
+
+		needSize += dirinfo.GetDirSize(srcDir)
+	}
+	GB := 1024 * 1024 * 1024
+	free := dirinfo.GetPartitionFreeSize(usrDir)
+	logger.Debugf("the %s partition free size:%.2f GB, the need size is:%.2f GB", usrPart,
+		float64(free)/float64(GB), float64(needSize)/float64(GB))
+	if uint64(needSize) > free {
+		return false, errors.New("the current partition is out of space")
+	}
+	return true, nil
 }

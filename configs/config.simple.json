@@ -2,7 +2,7 @@
   "version": "1.0.0",
   "distribution": "v23",
   "active_version": "20220210",
-  "cache_dir": "/.osrepo-cache",
+  "cache_dir": "/usr/.osrepo-cache",
   "max_repo_retention": 3,
   "repo_list": [
     {

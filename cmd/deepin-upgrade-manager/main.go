@@ -24,7 +24,7 @@ const (
 
 var (
 	_config  = flag.String("config", "/persistent/osroot/config.json", "the configuration file path")
-	_action  = flag.String("action", "commit", "the available actions: init, commit, rollback, list")
+	_action  = flag.String("action", "list", "the available actions: init, commit, rollback, list")
 	_version = flag.String("version", "", "the version which rollback")
 	_rootDir = flag.String("root", "/", "the rootfs mount point")
 )
