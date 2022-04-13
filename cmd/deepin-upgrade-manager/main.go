@@ -4,15 +4,13 @@ import (
 	"deepin-upgrade-manager/pkg/config"
 	"deepin-upgrade-manager/pkg/module/repo"
 	"deepin-upgrade-manager/pkg/module/repo/branch"
-	"deepin-upgrade-manager/pkg/module/util"
+	"deepin-upgrade-manager/pkg/module/single"
 	"deepin-upgrade-manager/pkg/upgrader"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 const (
@@ -21,8 +19,6 @@ const (
 	_ACTION_ROLLBACK = "rollback"
 	_ACTION_SNAPSHOT = "snapshot"
 	_ACTION_LIST     = "list"
-
-	_COMMIT_LOCK_FILE = "/tmp/deepin-upgrade-manager/commit.lock"
 )
 
 var (
@@ -52,7 +48,6 @@ func main() {
 		fmt.Println("new repo operator:", err)
 		os.Exit(-1)
 	}
-
 	switch *_action {
 	case _ACTION_INIT:
 		err = operator.Init()
@@ -63,25 +58,27 @@ func main() {
 		*_version = branch.GenInitName(conf.Distribution)
 		fallthrough
 	case _ACTION_COMMIT:
+		if !single.SetSingleInstance() {
+			fmt.Println("process already exists")
+			os.Exit(-1)
+		}
 		if len(*_version) == 0 {
-			if !tryLockCommit() {
-				return
-			}
-
 			*_version, err = generateBranchName(conf)
 			if err != nil {
 				fmt.Println("generate version failed:", err)
-				_ = os.Remove(_COMMIT_LOCK_FILE)
 				os.Exit(-1)
 			}
 		}
 		err = operator.Commit(*_version, fmt.Sprintf("Release %s", *_version), true)
 		if err != nil {
 			fmt.Println("commit failed:", err)
-			_ = os.Remove(_COMMIT_LOCK_FILE)
 			os.Exit(-1)
 		}
 	case _ACTION_ROLLBACK:
+		if !single.SetSingleInstance() {
+			fmt.Println("process already exists")
+			os.Exit(-1)
+		}
 		if len(*_version) == 0 {
 			fmt.Println("Must special version")
 			os.Exit(-1)
@@ -157,22 +154,4 @@ func listVersion(conf *config.Config) ([]string, error) {
 		return nil, err
 	}
 	return handler.List()
-}
-
-func tryLockCommit() bool {
-	if util.IsExists(_COMMIT_LOCK_FILE) {
-		return false
-	}
-
-	err := os.Mkdir(filepath.Dir(_COMMIT_LOCK_FILE), 0700)
-	if err != nil {
-		fmt.Println(err)
-		return false
-	}
-	err = ioutil.WriteFile(_COMMIT_LOCK_FILE, []byte(time.Now().String()), 0600)
-	if err != nil {
-		fmt.Println("commit lock:", err)
-		return false
-	}
-	return true
 }
