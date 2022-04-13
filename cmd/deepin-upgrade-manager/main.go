@@ -2,6 +2,7 @@ package main
 
 import (
 	"deepin-upgrade-manager/pkg/config"
+	"deepin-upgrade-manager/pkg/logger"
 	"deepin-upgrade-manager/pkg/module/repo"
 	"deepin-upgrade-manager/pkg/module/repo/branch"
 	"deepin-upgrade-manager/pkg/module/single"
@@ -41,7 +42,11 @@ func main() {
 		fmt.Println("config prepare wrong:", err)
 		os.Exit(-1)
 	}
-
+	if len(*_rootDir) == 1 {
+		logger.NewLogger("deepin-upgrade-manager", false)
+	} else {
+		logger.NewLogger("deepin-upgrade-manager", true)
+	}
 	operator, err := upgrader.NewUpgrader(conf,
 		*_rootDir, "/proc/self/mounts")
 	if err != nil {
@@ -50,9 +55,10 @@ func main() {
 	}
 	switch *_action {
 	case _ACTION_INIT:
+		logger.Info("start initialize a new empty repo")
 		err = operator.Init()
 		if err != nil {
-			fmt.Println("init repo failed:", err)
+			logger.Error("init repo failed:", err)
 			os.Exit(-1)
 		}
 		*_version = branch.GenInitName(conf.Distribution)
@@ -69,41 +75,45 @@ func main() {
 				os.Exit(-1)
 			}
 		}
+		logger.Info("the version number of this submission is:", *_version)
 		err = operator.Commit(*_version, fmt.Sprintf("Release %s", *_version), true)
 		if err != nil {
 			fmt.Println("commit failed:", err)
 			os.Exit(-1)
 		}
+		logger.Info("ending commit a new version")
 	case _ACTION_ROLLBACK:
 		if !single.SetSingleInstance() {
 			fmt.Println("process already exists")
 			os.Exit(-1)
 		}
+		logger.Info("start rollback a old version:", *_version)
 		if len(*_version) == 0 {
-			fmt.Println("Must special version")
+			logger.Error("Must special version")
 			os.Exit(-1)
 		}
 		// NOTICE(jouyouyun): must ensure the partition which in fstab had mounted.
 		err = operator.Rollback(*_version)
 		if err != nil {
-			fmt.Printf("rollback %q: %v\n", *_version, err)
+			logger.Errorf("rollback %q: %v", *_version, err)
 			os.Exit(-1)
 		}
+		logger.Info("end rollback a old version:", *_version)
 	case _ACTION_SNAPSHOT:
 		if len(*_version) == 0 {
-			fmt.Println("Must special version")
+			logger.Error("Must special version")
 			os.Exit(-1)
 		}
 		err = operator.Snapshot(*_version, true)
 		if err != nil {
-			fmt.Printf("snapshot %q: %v\n", *_version, err)
+			logger.Errorf("snapshot %q: %v", *_version, err)
 			os.Exit(-1)
 		}
 		return
 	case _ACTION_LIST:
 		verList, err := listVersion(conf)
 		if err != nil {
-			fmt.Println("list version:", err)
+			logger.Error("list version:", err)
 			os.Exit(-1)
 		}
 		fmt.Printf("ActiveVersion:%s\n", conf.ActiveVersion)
@@ -114,7 +124,7 @@ func main() {
 	conf.ActiveVersion = *_version
 	err = conf.Save()
 	if err != nil {
-		fmt.Printf("update version to %q: %v\n", *_version, err)
+		logger.Infof("update version to %q: %v", *_version, err)
 	}
 }
 

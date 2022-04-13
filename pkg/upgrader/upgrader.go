@@ -2,11 +2,11 @@ package upgrader
 
 import (
 	"deepin-upgrade-manager/pkg/config"
+	"deepin-upgrade-manager/pkg/logger"
 	"deepin-upgrade-manager/pkg/module/mountinfo"
 	"deepin-upgrade-manager/pkg/module/mountpoint"
 	"deepin-upgrade-manager/pkg/module/repo"
 	"deepin-upgrade-manager/pkg/module/util"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -192,7 +192,7 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 func (c *Upgrader) rollbackDir(dir, dstDir string) error {
 	srcDir := filepath.Join(dstDir, dir)
 	if !util.IsExists(srcDir) {
-		fmt.Println("[rollbackDir] data dir empty:", srcDir)
+		logger.Error("[rollbackDir] data dir empty:", srcDir)
 		return nil
 	}
 	dataDir := filepath.Join(c.rootMP, dir)
@@ -201,7 +201,7 @@ func (c *Upgrader) rollbackDir(dir, dstDir string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("[rollbackDir] will copy dir:", filepath.Join(dstDir, dir), tmpDir)
+	logger.Debug("[rollbackDir] will copy dir:", filepath.Join(dstDir, dir), tmpDir)
 	// TODO(jouyouyun): replace with codes
 	err = util.ExecCommand("cp", []string{"-rfp", srcDir, tmpDir})
 	// err = util.CopyDir(srcDir, tmpDir, false)
@@ -222,7 +222,7 @@ func (c *Upgrader) copyRepoData(rootDir, dataDir string,
 	for _, dir := range subscribeList {
 		srcDir := filepath.Join(rootDir, dir)
 		if !util.IsExists(srcDir) {
-			fmt.Println("[copyRepoData] src dir empty:", srcDir)
+			logger.Info("[copyRepoData] src dir empty:", srcDir)
 			continue
 		}
 		err := util.CopyDir(srcDir, filepath.Join(dataDir, dir), true)
@@ -252,7 +252,7 @@ func (c *Upgrader) migrateDirMount(srcDir, dstDir string) error {
 	if err != nil {
 		err = mounted.Umount()
 		if err != nil {
-			fmt.Println("[migrateDirMount] umount:", err)
+			logger.Error("[migrateDirMount] umount:", err)
 		}
 		return err
 	}

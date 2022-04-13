@@ -2,7 +2,7 @@ package mountinfo
 
 import (
 	"bufio"
-	"fmt"
+	"deepin-upgrade-manager/pkg/logger"
 	"os"
 	"strings"
 )
@@ -48,7 +48,7 @@ func Load(filename string) (MountInfoList, error) {
 		}
 		items := strings.Split(line, _MOUNTS_DELIM)
 		if len(items) != _MOUNTS_ITEM_NUM {
-			fmt.Println("invalid mounts line:", line)
+			logger.Debug("invalid mounts line:", line)
 			continue
 		}
 		if isFilterFSType(items[2]) {

@@ -2,8 +2,8 @@ package rootfs
 
 import (
 	"deepin-upgrade-manager/pkg/config"
+	"deepin-upgrade-manager/pkg/logger"
 	"deepin-upgrade-manager/pkg/module/mountpoint"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -60,7 +60,7 @@ func (fs *Rootfs) mountBindList() error {
 	repoList, err := fs.repoBindList.Mount()
 	if err != nil {
 		if e := preList.Umount(); e != nil {
-			fmt.Println("umount predefined list because repo list:", e)
+			logger.Warning("umount predefined list because repo list:", e)
 		}
 		return repoList.Umount()
 	}

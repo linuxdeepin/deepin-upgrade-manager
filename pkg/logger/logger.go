@@ -2,81 +2,181 @@ package logger
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"log/syslog"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 )
 
-var _logger *syslog.Writer
+type Logger struct {
+	name  string
+	log   *log.Logger
+	level Priority
+}
 
-func Open(debug bool, tag string) error {
-	if _logger != nil {
-		return nil
+type Priority int
+
+var logger Logger
+
+var stdLog = log.New(os.Stderr, "", log.Lshortfile)
+
+const (
+	LevelDisable Priority = iota
+	LevelFatal
+	LevelPanic
+	LevelError
+	LevelWarning
+	LevelInfo
+	LevelDebug
+)
+
+func NewLogger(name string, isInitramfs bool) {
+	if isInitramfs {
+		logger = Logger{
+			name:  name,
+			log:   log.New((io.Writer(os.Stderr)), "", log.Ldate|log.Ltime),
+			level: LevelDebug,
+		}
+	} else {
+		var writer io.Writer
+		syslogger, err := syslog.New(syslog.LOG_DAEMON, name)
+		if err != nil {
+			stdLog.Printf("failed to open log file: %v", err)
+			writer = io.MultiWriter(os.Stderr)
+		} else {
+			writer = io.MultiWriter(os.Stderr, syslogger)
+		}
+		logger = Logger{
+			name:  name,
+			log:   log.New(writer, "", log.Ldate|log.Ltime),
+			level: LevelDebug,
+		}
 	}
+}
 
-	var err error
-
-	priority := syslog.LOG_INFO
-	if debug {
-		priority = syslog.LOG_DEBUG
+func (l *Logger) doLog(level Priority, v ...interface{}) {
+	if !l.isNeedLog(level) {
+		return
 	}
+	s := buildMsg(3, l.isNeedTraceMore(level), v...)
+	l.log.Output(3, combineMsg(level, l.name, s))
+}
 
-	_logger, err = syslog.New(priority, tag)
-	if err != nil {
-		return err
+func (l *Logger) doLogf(level Priority, format string, v ...interface{}) {
+	if !l.isNeedLog(level) {
+		return
 	}
-	return nil
+	s := buildFormatMsg(3, l.isNeedTraceMore(level), format, v...)
+
+	l.log.Output(3, combineMsg(level, l.name, s))
 }
 
-func Debug(a ...interface{}) {
-	log.Println(a...)
-	_logger.Debug(fmt.Sprintln(a...))
+func (l *Logger) isNeedTraceMore(level Priority) bool {
+	return level <= LevelError
 }
 
-func Info(a ...interface{}) {
-	log.Println(a...)
-	_logger.Info(fmt.Sprintln(a...))
+func (l *Logger) isNeedLog(level Priority) bool {
+	return level <= l.level
 }
 
-func Warning(a ...interface{}) {
-	log.Println(a...)
-	_logger.Warning(fmt.Sprintln(a...))
+func buildMsg(calldepth int, loop bool, v ...interface{}) (msg string) {
+	s := fmtSprint(v...)
+	msg = doBuildMsg(calldepth+1, loop, s)
+	return
 }
 
-func Error(a ...interface{}) {
-	log.Println(a...)
-	_logger.Err(fmt.Sprintln(a...))
+func buildFormatMsg(calldepth int, loop bool, format string, v ...interface{}) (msg string) {
+	s := fmt.Sprintf(format, v...)
+	msg = doBuildMsg(calldepth+1, loop, s)
+	return
 }
 
-func Fatal(a ...interface{}) {
-	log.Println(a...)
-	_logger.Crit(fmt.Sprintln(a...))
+func fmtSprint(v ...interface{}) (s string) {
+	s = fmt.Sprintln(v...)
+	s = strings.TrimSuffix(s, "\n")
+	return
 }
 
-func Debugf(format string, a ...interface{}) {
-	log.Printf(format+"\n", a...)
-	_logger.Debug(fmt.Sprintf(format+"\n", a...))
+func doBuildMsg(calldepth int, loop bool, s string) (msg string) {
+	var file, lastFile string
+	var line, lastLine int
+	var ok bool
+	_, file, line, ok = runtime.Caller(calldepth)
+	lastFile, lastLine = file, line
+	msg = fmt.Sprintf("%s:%d: %s", filepath.Base(file), line, s)
+	if loop && ok {
+		for {
+			calldepth++
+			_, file, line, ok = runtime.Caller(calldepth)
+			if file == lastFile && line == lastLine {
+				// prevent infinite loop for that some platforms not
+				// works well, e.g. mips
+				break
+			}
+			if ok {
+				msg = fmt.Sprintf("%s\n  ->  %s:%d", msg, filepath.Base(file), line)
+			}
+			lastFile, lastLine = file, line
+		}
+	}
+	return
 }
 
-func Infof(format string, a ...interface{}) {
-	log.Printf(format+"\n", a...)
-	_logger.Info(fmt.Sprintf(format+"\n", a...))
+func combineMsg(level Priority, module, msg string) (combineMsg string) {
+	switch level {
+	case LevelDebug:
+		module += " [Debug]"
+	case LevelInfo:
+		module += " [Info]"
+	case LevelWarning:
+		module += " [Warning]"
+	case LevelError:
+		module += " [Error]"
+	case LevelFatal:
+		module += " [Fatal]"
+	}
+	return module + msg
 }
 
-func Warningf(format string, a ...interface{}) {
-	log.Printf(format+"\n", a...)
-	_logger.Warning(fmt.Sprintf(format+"\n", a...))
+func Debug(v ...interface{}) {
+	logger.doLog(LevelDebug, v...)
 }
 
-func Errorf(format string, a ...interface{}) {
-	log.Printf(format+"\n", a...)
-	_logger.Err(fmt.Sprintf(format+"\n", a...))
+func Warning(v ...interface{}) {
+	logger.doLog(LevelWarning, v...)
 }
 
-func Fatalf(format string, a ...interface{}) {
-	log.Printf(format+"\n", a...)
-	_logger.Crit(fmt.Sprintf(format+"\n", a...))
+func Info(v ...interface{}) {
+	logger.doLog(LevelInfo, v...)
 }
 
-func Close() error {
-	return _logger.Close()
+func Error(v ...interface{}) {
+	logger.doLog(LevelError, v...)
+}
+
+func Fatal(v ...interface{}) {
+	logger.doLog(LevelFatal, v...)
+}
+
+func Debugf(format string, v ...interface{}) {
+	logger.doLogf(LevelDebug, format, v...)
+}
+
+func Warningf(format string, v ...interface{}) {
+	logger.doLogf(LevelWarning, format, v...)
+}
+
+func Infof(format string, v ...interface{}) {
+	logger.doLogf(LevelInfo, format, v...)
+}
+
+func Errorf(format string, v ...interface{}) {
+	logger.doLogf(LevelError, format, v...)
+}
+
+func Fatalf(format string, v ...interface{}) {
+	logger.doLogf(LevelFatal, format, v...)
 }

@@ -3,6 +3,7 @@ package util
 import (
 	"crypto/md5"
 	"crypto/rand"
+	"deepin-upgrade-manager/pkg/logger"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -66,7 +67,6 @@ func ExecCommand(action string, args []string) error {
 	for {
 		buf := make([]byte, 1024)
 		_, err = stdout.Read(buf)
-		fmt.Printf("%s", string(buf))
 		if err != nil {
 			break
 		}
@@ -206,14 +206,14 @@ func CopyDir(src, dst string, enableHardlink bool) error {
 		case fiStat.Mode&syscall.S_IFLNK == syscall.S_IFLNK:
 			err = Symlink(srcSub, dstSub)
 		case fiStat.Mode&syscall.S_IFCHR == syscall.S_IFCHR:
-			fmt.Println("[CopyDir] will remove(char):", dstSub)
+			logger.Debug("[CopyDir] will remove(char):", dstSub)
 			err = os.RemoveAll(dstSub)
 		case fiStat.Mode&syscall.S_IFDIR == syscall.S_IFDIR:
 			err = CopyDir(srcSub, dstSub, enableHardlink)
 		case fiStat.Mode&syscall.S_IFREG == syscall.S_IFREG:
 			err = CopyFile2(srcSub, dstSub, sfi, enableHardlink)
 		default:
-			fmt.Println("unknown file type:", srcSub)
+			logger.Debug("unknown file type:", srcSub)
 		}
 		if err != nil {
 			return err

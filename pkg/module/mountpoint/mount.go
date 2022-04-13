@@ -1,8 +1,8 @@
 package mountpoint
 
 import (
+	"deepin-upgrade-manager/pkg/logger"
 	"deepin-upgrade-manager/pkg/module/util"
-	"fmt"
 	"strings"
 )
 
@@ -45,7 +45,7 @@ func (list MountPointList) Umount() error {
 	}
 	args := []string{"-R"}
 	args = append(args, items...)
-	fmt.Println("Will umount:", args)
+	logger.Info("Will umount:", args)
 	return util.ExecCommand(_CMD_UMOUNT, args)
 }
 
@@ -64,7 +64,7 @@ func (mp *MountPoint) Mount() error {
 	}
 	args = append(args, mp.Src)
 	args = append(args, mp.Dest)
-	fmt.Println("Will mount:", args)
+	logger.Info("Will mount:", args)
 	return util.ExecCommand(_CMD_MOUNT, args)
 }
 
