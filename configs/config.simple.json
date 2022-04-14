@@ -17,7 +17,9 @@
         "/var/lib/dkms",
         "/var/lib/dpkg",
         "/var/lib/man-db",
-        "/var/lib/initramfs-tools"
+        "/var/lib/initramfs-tools",
+        "/var/lib/systemd/deb-systemd-helper-enabled",
+        "/var/lib/selinux"
       ]
     }
   ]

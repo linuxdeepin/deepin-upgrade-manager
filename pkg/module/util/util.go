@@ -117,6 +117,131 @@ func Chdir(dir string) (string, error) {
 	return pwd, nil
 }
 
+func getFilterRootDir(root, filterRoot string) string {
+	if root == filterRoot || len(filterRoot) == 1 {
+		return ""
+	}
+	//fmt.Printf("root:%s,filter:%s\n", root, filterRoot)
+	dir := filepath.Dir(filterRoot)
+	if root == dir {
+		return filterRoot
+	} else {
+		return getFilterRootDir(root, dir)
+	}
+}
+
+func IsExistsPath(list []string, str string) bool {
+	for _, v := range list {
+		if v == str {
+			return true
+		}
+	}
+	return false
+}
+
+func IsRootSame(list []string, str string) bool {
+	for _, v := range list {
+		num := 0
+		if num == 0 && str == v {
+			num++
+			continue
+		}
+		if strings.HasPrefix(str, v) {
+			return true
+		}
+	}
+	return false
+}
+
+func GetRealDirList(list []string, rootDir string) []string {
+	var newList []string
+	var rootList []string
+	for _, v := range list {
+		dir := filepath.Join(rootDir, v)
+		rootList = append(rootList, dir)
+	}
+	for _, v := range list {
+		dir := filepath.Join(rootDir, v)
+		real, err := filepath.EvalSymlinks(dir)
+		if err != nil {
+			real = dir
+		}
+		if IsRootSame(rootList, real) {
+			logger.Infof("dir %s is the same root as dir %s, need ignore dir %s", real, v, dir)
+			continue
+		}
+		newList = append(newList, v)
+	}
+	return newList
+}
+
+// @title    MoveDirSubFile
+// @description   move system files to sub dir
+// @param     orig         		string         		"files that need to be moved, ex:/etc"
+// @param     dst         		string         		"tmp dir, ex:/etc/tmp"
+// @param     newDir         	string         		"snapshot file path, ex:/etc/.v23.0.0.1"
+// @param     filter		    *[]string      		"list of files to filter, ex:/etc/a/b/"
+func MoveDirSubFile(orig, dst, newDir string, filter []string) error {
+	var filterRoots []string
+	for _, v := range filter {
+		dir := getFilterRootDir(orig, v)
+		if dir == "" {
+			continue
+		}
+		filterRoots = append(filterRoots, dir)
+	}
+	if len(filter) != 0 && len(filterRoots) == 0 {
+		return nil
+	}
+	if !IsExistsPath(filterRoots, orig) {
+		err := Mkdir(orig, dst)
+		if err != nil {
+			return err
+		}
+	}
+
+	fiList, err := ioutil.ReadDir(orig)
+	if err != nil {
+		return err
+	}
+	for _, fi := range fiList {
+		origSub := filepath.Join(orig, fi.Name())
+		dstSub := filepath.Join(dst, fi.Name())
+
+		if len(filterRoots) > 0 && IsExistsPath(filterRoots, origSub) {
+			continue
+		}
+		if fi.Name() == newDir {
+			continue
+		}
+		os.Rename(origSub, dstSub)
+	}
+
+	for _, v := range filterRoots {
+		dstdir := filepath.Join(dst, filepath.Base(v))
+		MoveDirSubFile(v, dstdir, newDir, filter)
+	}
+	return nil
+}
+
+// @title    SubMoveOut
+// @description    sub files moved out
+// @param     orig         		string         		"sub dir, ex:/etc/2020"
+// @param     dst         		string         		"out dir, ex:/etc"
+func SubMoveOut(orig, dst string) error {
+
+	fiList, err := ioutil.ReadDir(orig)
+	if err != nil {
+		return err
+	}
+	for _, fi := range fiList {
+		origSub := filepath.Join(orig, fi.Name())
+		dstSub := filepath.Join(dst, fi.Name())
+		os.Rename(origSub, dstSub)
+	}
+	return nil
+}
+
 func Move(orig, dst string, deleted bool) (string, error) {
 	if !IsExists(orig) {
 		return "", os.Rename(dst, orig)
@@ -208,6 +333,71 @@ func Symlink(src, dst string) error {
 	return os.Symlink(origin, dst)
 }
 
+// @title    CompareDirAndCopy
+// @description   compare files, hardlink if they are the same, copy if they are different
+// @param     src         		string         		"snapshot dir, ex:/persitent/osroot/v23/2020/etc"
+// @param     dst         		string         		"snapshot storage path, ex:/etc/.2020/"
+// @param     compare         	string         		"need compare dir, ex:/etc"
+// @param     filter		    *[]string      		"list of files to filter"
+func CompareDirAndCopy(src, dst, cmp string, filter []string) error {
+	sfi, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	for _, v := range filter {
+		if cmp == v {
+			return nil
+		}
+	}
+
+	err = Mkdir(src, dst)
+	if err != nil {
+		return err
+	}
+	fiList, err := ioutil.ReadDir(src)
+	if err != nil {
+		return err
+	}
+	for _, fi := range fiList {
+		srcSub := filepath.Join(src, fi.Name())
+		dstSub := filepath.Join(dst, fi.Name())
+		cmpSub := filepath.Join(cmp, fi.Name())
+		fiStat, ok := fi.Sys().(*syscall.Stat_t)
+		if !ok {
+			return fmt.Errorf("failed to get raw stat for: %s", srcSub)
+		}
+
+		switch {
+		case fiStat.Mode&syscall.S_IFSOCK == syscall.S_IFSOCK:
+			logger.Debug("sock files need to be filtered:", srcSub)
+		case fiStat.Mode&syscall.S_IFLNK == syscall.S_IFLNK:
+			err = Symlink(srcSub, dstSub)
+		case fiStat.Mode&syscall.S_IFCHR == syscall.S_IFCHR:
+			logger.Debug("[CopyDir] will remove(char):", dstSub)
+			err = os.RemoveAll(dstSub)
+		case fiStat.Mode&syscall.S_IFDIR == syscall.S_IFDIR:
+			err = CompareDirAndCopy(srcSub, dstSub, cmpSub, filter)
+		case fiStat.Mode&syscall.S_IFREG == syscall.S_IFREG:
+			equal, errC := IsFileSame(srcSub, cmpSub)
+			if errC == nil {
+				if equal {
+					err = CopyFile2(cmpSub, dstSub, sfi, true)
+				} else {
+					err = CopyFile2(srcSub, dstSub, sfi, false)
+				}
+			} else {
+				err = CopyFile2(srcSub, dstSub, sfi, false)
+			}
+		default:
+			logger.Debug("unknown file type:", srcSub)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func CopyDir(src, dst, dataDir string, enableHardlink bool) error {
 	sfi, err := os.Stat(src)
 	if err != nil {
@@ -287,7 +477,7 @@ func CopyFile2(src, dst string, sfi os.FileInfo, enableHardlink bool) error {
 	if enableHardlink {
 		err = os.Link(src, dst)
 	}
-	if err != nil {
+	if err != nil || !enableHardlink {
 		err = doCopy(src, dst, sfi)
 	}
 	return err
@@ -368,18 +558,81 @@ func IsItemInList(item string, list []string) bool {
 }
 
 func doCopy(src, dst string, sfi os.FileInfo) error {
-	fs, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer fs.Close()
-	fd, err := os.OpenFile(dst, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, sfi.Mode())
-	if err != nil {
-		return err
-	}
-	defer fd.Close()
-
-	_, err = io.Copy(fd, fs)
-	_ = fd.Sync()
+	err := ExecCommand("cp", []string{"-r", "-P", "--preserve=all", src, dst})
 	return err
+}
+
+// func doCopy(src, dst string, sfi os.FileInfo) error {
+// 	fs, err := os.Open(src)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	defer fs.Close()
+// 	fd, err := os.OpenFile(dst, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, sfi.Mode())
+// 	if err != nil {
+// 		return err
+// 	}
+// 	defer fd.Close()
+
+// 	_, err = io.Copy(fd, fs)
+// 	_ = fd.Sync()
+// 	return err
+// }
+
+// @title    HandlerDirPrepare
+// @description   file preparation on rollback
+// @param     src         		string         		"snapshot dir, ex:/persitent/osroot/v23/2020/etc"
+// @param     dst         		string         		"dir to be rolled back, ex:/etc"
+// @param     version         	string         		"snapshot version, ex:v23.0.0.1"
+// @param     filter		    *[]string      		"list of files to filter"
+// @return    dir				string   			"generated temporary directory"
+func HandlerDirPrepare(src, dst, version, rootdir string, filter []string) (string, error) {
+	dst = filepath.Join(rootdir, dst)
+	src = filepath.Join(rootdir, src)
+	dir := filepath.Join(dst, string("/.")+version)
+	if IsExists(dir) {
+		os.RemoveAll(dir)
+	}
+	err := Mkdir(dst, dir)
+	logger.Debugf("start preparing the dir, src:%s, dir:%s, dst:%s, version:%s", src, dir, dst, version)
+	if err != nil {
+		return "", err
+	}
+	return dir, CompareDirAndCopy(src, dir, dst, filter)
+}
+
+// @title    HandlerDirReplace
+// @description   file replace on rollback
+// @param     src         		string         		"snapshot dir, ex:/persitent/osroot/v23/2020/etc"
+// @param     dst         		string         		"dir to be rolled back, ex:/etc"
+// @param     version         	string         		"snapshot version, ex:v23.0.0.1"
+// @param     filter		    *[]string      		"list of files to filter"
+// @return    dir				string   			"generated temporary directory"
+func HandlerDirReplace(src, dst, version, rootdir string, filter []string) (string, error) {
+	dst = filepath.Join(rootdir, dst)
+	src = filepath.Join(rootdir, src)
+
+	newFile := string(".") + version
+	newDir := filepath.Join(dst, newFile)
+	dir := filepath.Join(dst, string("/.old")+version)
+	if IsExists(dir) {
+		os.RemoveAll(dir)
+	}
+	err := Mkdir(dst, dir)
+	logger.Debugf("start replace the dir, src:%s, dir:%s, dst:%s, version:%s", src, dir, dst, version)
+	if err != nil {
+		return "", err
+	}
+	err = MoveDirSubFile(dst, dir, newFile, filter)
+	if err != nil {
+		return "", err
+	}
+	if IsExists(newDir) {
+		logger.Debugf("start file replacement,dst:%s,newDir:%s", dst, newDir)
+		err := SubMoveOut(newDir, dst)
+		if err != nil {
+			logger.Warningf("failed move sub dir,orig:%s,newDir:%s", dst, newDir)
+		}
+	}
+	return dir, nil
 }

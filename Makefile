@@ -27,8 +27,8 @@ build: prepare
 	@env GOPATH=${PWD}/${GOPATH_DIR}:${GOCODE}:${GOPATH} go build -o ${PWD}/${PROG_UPGRADER} ${PRJ}/cmd/${PROG_UPGRADER}
 
 install:
-	# @mkdir -p ${DESTDIR}/persistent/osroot/
-	# @cp -f ${PWD}/configs/config.simple.json  ${DESTDIR}/persistent/osroot/config.simple.json
+	@mkdir -p ${DESTDIR}/etc/${PRJ}/
+	@cp -f ${PWD}/configs/config.simple.json  ${DESTDIR}/etc/${PRJ}/config.json
 	@mkdir -p ${DESTDIR}${PREFIX}/share/dbus-1/system.d/
 	@mkdir -p ${DESTDIR}${PREFIX}/share/dbus-1/system-services/
 	@cp -f ${PWD}/configs/dbus/${PROG_DBUS}.conf  ${DESTDIR}${PREFIX}/share/dbus-1/system.d/
@@ -38,8 +38,11 @@ install:
 	@mkdir -p ${DESTDIR}/etc/grub.d ${DESTDIR}/etc/default/grub.d
 	@cp -f ${PWD}/cmd/grub.d/10_deepin-upgrade-manager ${DESTDIR}/etc/default/grub.d
 	@cp -f ${PWD}/cmd/grub.d/15_deepin-upgrade-manager ${DESTDIR}/etc/grub.d
+	@cp -f ${PWD}/cmd/grub.d/sw/15_deepin-upgrade-manager ${DESTDIR}/etc/default/grub.d/sw
 	@mkdir -p ${DESTDIR}${PREFIX}/share/initramfs-tools/hooks
 	@cp -f ${PWD}/cmd/initramfs-hook/* ${DESTDIR}${PREFIX}/share/initramfs-tools/hooks/
+	@mkdir -p ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom
+	@cp -f ${PWD}/cmd/initramfs-scripts/* ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom/
 	@mkdir -p ${DESTDIR}${PREFIX}/share/${PRJ}
 	@cp -rf ${PWD}/scripts/apt.conf.d ${DESTDIR}${PREFIX}/share/${PRJ}/
 	@cp -rf ${PWD}/scripts/dpkg.cfg.d ${DESTDIR}${PREFIX}/share/${PRJ}/
@@ -48,11 +51,12 @@ uninstall:
 	@rm -f ${DESTDIR}${PREFIX}/sbin/${PROG_UPGRADER}
 	@rm -f ${DESTDIR}${PREFIX}/share/dbus-1/system.d/${PROG_DBUS}.conf
 	@rm -f ${DESTDIR}${PREFIX}/share/dbus-1/system-services/${PROG_DBUS}.service
-	# @rm -f ${DESTDIR}/persistent/osroot/config.simple.json
+	@rm -f ${DESTDIR}/etc/${PRJ}/config.json
 	@rm -f ${DESTDIR}/etc/default/grub.d/10_deepin-upgrade-manager
 	@rm -f ${DESTDIR}/etc/grub.d/15_deepin-upgrade-manager
 	@rm -f ${DESTDIR}${PREFIX}/share/initramfs-tools/hooks/ostree
 	@rm -f ${DESTDIR}${PREFIX}/share/initramfs-tools/hooks/${PROG_UPGRADER}
+	@rm -f ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom/${PROG_UPGRADER}
 	@rm -rf ${DESTDIR}${PREFIX}/share/${PRJ}
 
 clean:

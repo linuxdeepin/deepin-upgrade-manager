@@ -68,18 +68,26 @@ func (c *Upgrader) Commit(newVersion, subject string, useSysData bool) error {
 	return nil
 }
 
-func (c *Upgrader) Snapshot(version string, bootEnabled bool) error {
-	for _, v := range c.conf.RepoList {
-		err := c.repoSnapshot(v, version, bootEnabled)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+func (c *Upgrader) UpdateGrub() error {
+	logger.Info("start update grub")
+	err := util.ExecCommand("update-grub", []string{})
+	return err
 }
 
-func (c *Upgrader) Rollback(version string) error {
-	err := c.Snapshot(version, false)
+func (c *Upgrader) Snapshot(version string, bootEnabled bool) ([]mountpoint.MountPointList, error) {
+	var mountedPointRepoList []mountpoint.MountPointList
+	for _, v := range c.conf.RepoList {
+		mountedPointList, err := c.repoSnapshot(v, version, bootEnabled)
+		if err != nil {
+			return mountedPointRepoList, err
+		}
+		mountedPointRepoList = append(mountedPointRepoList, mountedPointList)
+	}
+	return mountedPointRepoList, nil
+}
+
+func (c *Upgrader) Rollback(version string, conf *config.Config) error {
+	mountedPointRepoList, err := c.Snapshot(version, false)
 	if err != nil {
 		return err
 	}
@@ -88,6 +96,23 @@ func (c *Upgrader) Rollback(version string) error {
 		err = c.repoRollback(v, version)
 		if err != nil {
 			return err
+		}
+	}
+	//restore mount points under initramfs and save action version
+	if len(c.rootMP) != 1 {
+		conf.ActiveVersion = version
+		err = conf.Save()
+		if err != nil {
+			logger.Infof("update version to %q: %v", version, err)
+		}
+		for _, mountPointList := range mountedPointRepoList {
+			for _, v := range mountPointList {
+				err = util.ExecCommand("umount", []string{v.Dest})
+				logger.Info("restore system mount, will umount:", v.Dest)
+				if err != nil {
+					logger.Warning("failed umount, err: ", err)
+				}
+			}
 		}
 	}
 	return nil
@@ -119,26 +144,32 @@ func (c *Upgrader) repoCommit(repoConf *config.RepoConfig, newVersion, subject s
 }
 
 func (c *Upgrader) repoSnapshot(repoConf *config.RepoConfig, version string,
-	bootEnabled bool) error {
+	bootEnabled bool) (mountpoint.MountPointList, error) {
+	var mountedPointList mountpoint.MountPointList
 	handler := c.repoSet[repoConf.Repo]
 	dataDir := filepath.Join(c.rootMP, repoConf.SnapshotDir, version)
 	_ = os.RemoveAll(dataDir)
 	err := handler.Snapshot(version, dataDir)
 	if err != nil {
-		return err
+		return mountedPointList, err
 	}
 	if !bootEnabled {
-		return nil
-	}
-	err = c.updataLocalMount(dataDir)
-	if err != nil {
-		logger.Warning("the fstab file does not exist in the snapshot, read the local fstabl.")
-		err = c.updataLocalMount("/")
+		mountedPointList, err = c.updataLoaclMount(dataDir)
 		if err != nil {
-			return err
+			logger.Warning("the fstab file does not exist in the snapshot, read the local fstabl.")
+			mountedPointList, err = c.updataLoaclMount("/")
+			if err != nil {
+				return mountedPointList, err
+			}
+		}
+	} else {
+		err := c.enableSnapshotBoot(dataDir, version)
+		if err != nil {
+			return mountedPointList, err
 		}
 	}
-	return c.enableSnapshotBoot(dataDir, version)
+
+	return mountedPointList, nil
 }
 
 func (c *Upgrader) enableSnapshotBoot(snapDir, version string) error {
@@ -149,6 +180,7 @@ func (c *Upgrader) enableSnapshotBoot(snapDir, version string) error {
 	}
 
 	dstDir := filepath.Join(c.rootMP, "boot/snapshot", version)
+	localBootDir := filepath.Join(c.rootMP, "/boot")
 	err = os.MkdirAll(dstDir, 0700)
 	if err != nil {
 		return err
@@ -163,13 +195,17 @@ func (c *Upgrader) enableSnapshotBoot(snapDir, version string) error {
 			strings.HasPrefix(fi.Name(), "kernel-") ||
 			strings.HasPrefix(fi.Name(), "vmlinux-") ||
 			strings.HasPrefix(fi.Name(), "initrd.img-") {
-			err = util.ExecCommand("cp", []string{
-				"-f",
-				filepath.Join(bootDir, fi.Name()),
-				filepath.Join(dstDir, fi.Name()),
-			})
-			// err = util.CopyFile(filepath.Join(bootDir, fi.Name()),
-			// 	filepath.Join(dstDir, fi.Name()), false)
+
+			snapFile := filepath.Join(bootDir, fi.Name())
+			localFile := filepath.Join(localBootDir, fi.Name())
+			dstFile := filepath.Join(dstDir, fi.Name())
+			isSame, err := util.IsFileSame(localBootDir, snapFile)
+			if isSame && err == nil {
+				err = util.CopyFile(localFile, dstFile, true)
+			} else {
+				err = util.CopyFile(snapFile, dstFile, false)
+			}
+
 			if err != nil {
 				_ = os.Remove(dstDir)
 				return err
@@ -183,55 +219,85 @@ func (c *Upgrader) enableSnapshotBoot(snapDir, version string) error {
 	return nil
 }
 
-func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) error {
-	snapDir := filepath.Join(c.rootMP, repoConf.SnapshotDir, version)
-	dstDir := filepath.Join(c.rootMP, repoConf.StageDir, c.conf.Distribution)
-	tmpDir := dstDir + "-" + util.MakeRandomString(util.MinRandomLen)
-	err := util.CopyDir(snapDir, tmpDir, c.conf.CacheDir, true)
-	if err != nil {
-		return err
-	}
-
-	_, err = util.Move(dstDir, tmpDir, true)
-	if err != nil {
-		return err
-	}
-
-	for _, dir := range repoConf.SubscribeList {
-		err := c.rollbackDir(dir, dstDir)
+// @title    handleRepoRollbak
+// @description   handling files on rollback
+// @param     realDir         	string         		"original system file path, ex:/etc"
+// @param     snapDir         	string         		"snapshot file path, ex:/persitent/osroot"
+// @param     version         	string         		"snapshot version, ex:v23.0.0.1"
+// @param     rollbackDirList   *[]string      		"rollback produces tmp files, ex:/etc/.old"
+// @param     HandlerDir   		function pointer    "file handler function pointer"
+func (c *Upgrader) handleRepoRollbak(realDir, snapDir, version string,
+	rollbackDirList *[]string, HandlerDir func(src, dst, version, rootDir string, filter []string) (string, error)) error {
+	var filterDir []string
+	var rollbackDir string
+	var err error
+	list := c.mountInfos.Query(realDir)
+	logger.Debugf("start rolling back, realDir:%s, snapDir:%s, version:%s, list len:%d",
+		realDir, snapDir, version, len(list))
+	if len(list) > 0 {
+		rootPartition, err := dirinfo.GetDirPartition(realDir)
 		if err != nil {
 			return err
 		}
+		for _, l := range list {
+			if l.MountPoint == realDir {
+				continue
+			}
+			if rootPartition != l.Partition {
+				filterDir = append(filterDir, l.MountPoint)
+			}
+		}
+		logger.Debugf("the filter directory path is %s", filterDir)
+	}
+	rollbackDir, err = HandlerDir(filepath.Join(snapDir+realDir), realDir, version, c.rootMP, filterDir)
+	if err != nil {
+		logger.Warningf("fail rollback dir:%s,err:%v", realDir, err)
+	} else {
+		*rollbackDirList = append(*rollbackDirList, rollbackDir)
+		logger.Debug("rollbackDir:", rollbackDir)
+	}
+
+	for _, l := range filterDir {
+		c.handleRepoRollbak(l, snapDir, version, rollbackDirList, HandlerDir)
 	}
 	return nil
 }
 
-func (c *Upgrader) rollbackDir(dir, dstDir string) error {
-	srcDir := filepath.Join(dstDir, dir)
-	if !util.IsExists(srcDir) {
-		logger.Error("[rollbackDir] data dir empty:", srcDir)
-		return nil
+func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) error {
+	var rollbackDirList []string
+	snapDir := filepath.Join(repoConf.SnapshotDir, version)
+	realSubscribeList := util.GetRealDirList(repoConf.SubscribeList, c.rootMP)
+	for _, dir := range realSubscribeList {
+		err := c.handleRepoRollbak(dir, snapDir, version, &rollbackDirList, util.HandlerDirPrepare)
+		if err != nil {
+			return err
+		}
 	}
-	dataDir := filepath.Join(c.rootMP, dir)
-	tmpDir := dataDir + "-" + util.MakeRandomString(util.MinRandomLen)
-	err := c.migrateDirMount(dataDir, tmpDir)
-	if err != nil {
-		return err
+	var bootDir string
+	for _, dir := range realSubscribeList {
+		logger.Debug("start replacing the dir:", dir)
+		if strings.HasPrefix(dir, filepath.Join(c.rootMP, "/boot")) {
+			logger.Debugf("the %s needs to be replaced last", dir)
+			bootDir = dir
+			continue
+		}
+		err := c.handleRepoRollbak(dir, snapDir, version, &rollbackDirList, util.HandlerDirReplace)
+		if err != nil {
+			return err
+		}
 	}
-	logger.Debug("[rollbackDir] will copy dir:", filepath.Join(dstDir, dir), tmpDir)
-	// TODO(jouyouyun): replace with codes
-	err = util.ExecCommand("cp", []string{"-rfp", srcDir, tmpDir})
-	// err = util.CopyDir(srcDir, tmpDir, false)
-	if err != nil {
-		return err
+	if len(bootDir) != 0 {
+		err := c.handleRepoRollbak(bootDir, snapDir, version, &rollbackDirList, util.HandlerDirReplace)
+		if err != nil {
+			return err
+		}
 	}
-
-	bakDir, err := util.Move(dataDir, tmpDir, false)
-	if err != nil {
-		return err
+	for _, v := range rollbackDirList {
+		if util.IsExists(v) {
+			os.RemoveAll(v)
+		}
 	}
-
-	return c.umountAndRemoveDir(bakDir)
+	return nil
 }
 
 func (c *Upgrader) copyRepoData(rootDir, dataDir string,
@@ -248,54 +314,6 @@ func (c *Upgrader) copyRepoData(rootDir, dataDir string,
 		}
 	}
 	return nil
-}
-
-func (c *Upgrader) migrateDirMount(srcDir, dstDir string) error {
-	mountList := c.mountInfos.Query(srcDir)
-	if len(mountList) == 0 {
-		return nil
-	}
-	var mpList mountpoint.MountPointList
-	srcLen := len(srcDir)
-	for _, m := range mountList {
-		mpList = append(mpList, &mountpoint.MountPoint{
-			Src:     m.Partition,
-			Dest:    filepath.Join(dstDir, m.MountPoint[srcLen:]),
-			FSType:  m.FSType,
-			Options: m.Options,
-		})
-	}
-	mounted, err := mpList.Mount()
-	if err != nil {
-		err = mounted.Umount()
-		if err != nil {
-			logger.Error("[migrateDirMount] umount:", err)
-		}
-		return err
-	}
-	return nil
-}
-
-func (c *Upgrader) umountAndRemoveDir(dir string) error {
-	mountList := c.mountInfos.Query(dir)
-	if len(mountList) == 0 {
-		return os.RemoveAll(dir)
-	}
-
-	var mpList mountpoint.MountPointList
-	for _, m := range mountList {
-		mpList = append(mpList, &mountpoint.MountPoint{
-			Src:     m.Partition,
-			Dest:    m.MountPoint,
-			FSType:  m.FSType,
-			Options: m.Options,
-		})
-	}
-	err := mpList.Umount()
-	if err != nil {
-		return err
-	}
-	return os.RemoveAll(dir)
 }
 
 func (c *Upgrader) isDirSpaceEnough(rootDir string, subscribeList []string) (bool, error) {
@@ -323,7 +341,7 @@ func (c *Upgrader) isDirSpaceEnough(rootDir string, subscribeList []string) (boo
 		needSize += dirinfo.GetDirSize(srcDir)
 	}
 	GB := 1024 * 1024 * 1024
-	free := dirinfo.GetPartitionFreeSize(usrDir)
+	free, _ := dirinfo.GetPartitionFreeSize(usrPart)
 	logger.Debugf("the %s partition free size:%.2f GB, the need size is:%.2f GB", usrPart,
 		float64(free)/float64(GB), float64(needSize)/float64(GB))
 	if uint64(needSize) > free {
@@ -332,54 +350,70 @@ func (c *Upgrader) isDirSpaceEnough(rootDir string, subscribeList []string) (boo
 	return true, nil
 }
 
-func (c *Upgrader) updataLocalMount(snapDir string) error {
-	fsFilePath := filepath.Join(snapDir, "etc/fstab")
-	_, err := ioutil.ReadFile(fsFilePath)
+func (c *Upgrader) updataLoaclMount(snapDir string) (mountpoint.MountPointList, error) {
+	fstabDir := filepath.Join(snapDir, "etc/fstab")
+	_, err := ioutil.ReadFile(fstabDir)
+	var mountedPointList mountpoint.MountPointList
 	if err != nil {
-		return err
+		return mountedPointList, err
 	}
-	fsInfo, err := fstabinfo.Load(fsFilePath, c.rootMP)
+	fsInfo, err := fstabinfo.Load(fstabDir, c.rootMP)
 	if err != nil {
-		return err
+		logger.Debugf("the %s file does not exist in the snapshot, read the local fstabl", fstabDir)
+		return mountedPointList, err
+	}
+	rootPartition, err := dirinfo.GetDirPartition(c.rootMP)
+	if err != nil {
+		return mountedPointList, err
 	}
 	for _, info := range fsInfo {
-		logger.Debugf("get %s mount information, partition:%s,point:%s", fsFilePath, info.Partition, info.MountPoint)
-		m := c.mountInfos.Match(info.MountPoint)
-		if m != nil {
-			if m.Partition != info.Partition {
-				logger.Infof("the %s is not mounted correctly and needs to be remounted", m.MountPoint)
+		if info.SrcPoint == rootPartition || info.DestPoint == "/" {
+			logger.Debugf("ignore mount point %s", info.DestPoint)
+			continue
+		}
+		logger.Debugf("bind:%v,SrcPoint:%v,DestPoint:%v", info.Bind, info.SrcPoint, info.DestPoint)
+		m := c.mountInfos.Match(info.DestPoint)
+		if m != nil && !info.Bind {
+			if m.Partition != info.SrcPoint {
+				mp := filepath.Join(c.rootMP, m.MountPoint)
+				logger.Infof("the %s is not mounted correctly and needs to be unmouted", mp)
 				newInfo := &mountpoint.MountPoint{
 					Src:     m.Partition,
-					Dest:    m.MountPoint,
+					Dest:    mp,
 					FSType:  m.FSType,
 					Options: m.Options,
 				}
 				err := newInfo.Umount()
 				if err != nil {
-					return err
+					return mountedPointList, err
 				}
 				err = os.RemoveAll(newInfo.Dest)
 				if err != nil {
-					return err
+					return mountedPointList, err
 				}
 			} else {
 				continue
 			}
 		}
+		mp := filepath.Join(c.rootMP, info.DestPoint)
+		logger.Infof("the %s is not mounted and needs to be mouted", mp)
 		oldInfo := &mountpoint.MountPoint{
-			Src:     info.Partition,
-			Dest:    info.MountPoint,
+			Src:     info.SrcPoint,
+			Dest:    mp,
 			FSType:  info.FSType,
 			Options: info.Options,
+			Bind:    info.Bind,
 		}
 		err := oldInfo.Mount()
+		mountedPointList = append(mountedPointList, oldInfo)
 		if err != nil {
+			logger.Error("failed to mount dir", mp)
 			err = oldInfo.Umount()
 			if err != nil {
-				logger.Error("[updataLocalMount] umount:", err)
+				logger.Error("failed to umount dir:", err)
 			}
-			return err
+			return mountedPointList, err
 		}
 	}
-	return nil
+	return mountedPointList, nil
 }

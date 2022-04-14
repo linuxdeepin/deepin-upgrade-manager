@@ -93,27 +93,16 @@ linux_entry ()
     if [ "$quick_boot" = 1 ]; then
         echo "	recordfail" | sed "s/^/$submenu_indentation/"
     fi
-
+    
+  sed "s/^/$submenu_indentation/" << "EOF"
+	set	boot=(${root})/boot/
+EOF
     # Use ELILO's generic "efifb" when it's known to be available.
     # FIXME: We need an interface to select vesafb in case efifb can't be used.
     arch=`uname -m`
     if [ x"$arch" = x"mips64" ]; then
         need_boot=1
     fi
-    if [ "x$GRUB_GFXPAYLOAD_LINUX" = x ] && [ "$arch" != "aarch64" ] ; then
-        echo "	load_video" | sed "s/^/$submenu_indentation/"
-    else
-        if [ "x$GRUB_GFXPAYLOAD_LINUX" != xtext ] && [ "$arch" != "aarch64" ] ; then
-	        echo "	load_video" | sed "s/^/$submenu_indentation/"
-        fi
-    fi
-    if ([ "x$GRUB_GFXPAYLOAD_LINUX" != x ] || [ "$gfxpayload_dynamic" = 1 ]); then
-        echo "	gfxmode \$linux_gfx_mode" | sed "s/^/$submenu_indentation/"
-    fi
-
-    echo "	insmod gzio" | sed "s/^/$submenu_indentation/"
-    echo "	if [ x\$grub_platform = xxen ]; then insmod xzio; insmod lzopio; fi" | sed "s/^/$submenu_indentation/"
-
     if [ x$dirname = x/ ]; then
         if [ -z "${prepare_root_cache}" ]; then
             prepare_root_cache="$(prepare_grub_to_access_device ${GRUB_DEVICE} | grub_add_tab)"
@@ -131,15 +120,6 @@ linux_entry ()
 	echo	'$(echo "$message" | grub_quote)'
 EOF
     fi
-    if test -d /sys/firmware/efi && test -e "${linux}.efi.signed"; then
-        sed "s/^/$submenu_indentation/" << EOF
-	linux	${linux}.efi.signed root=${linux_root_device_thisversion} ro ${args}
-EOF
-    else
-        sed "s/^/$submenu_indentation/" << EOF
-	linux	${linux} root=${linux_root_device_thisversion} ro ${args}
-EOF
-    fi
     if test -n "${initrd}" ; then
         # TRANSLATORS: ramdisk isn't identifier. Should be translated.
         if [ x"$quiet_boot" = x0 ]; then
@@ -149,10 +129,17 @@ EOF
 EOF
         fi
         sed "s/^/$submenu_indentation/" << EOF
-	initrd	${initrd}
+	linux.boot	\${boot}${initrd}
 EOF
     fi
-
+  if test -f /boot/bootloader.bin ; then
+      message="$(gettext_printf "Loading Linux %s ..." "bootloader.bin")"
+      sed "s/^/$submenu_indentation/" << EOF
+	echo	'$(echo "$message" | grub_quote)'
+EOF
+    sed "s/^/$submenu_indentation/" << EOF
+	linux.console	\${boot}/bootloader.bin
+EOF
     if [ x"$dtbo" = x1 ]; then
         if [ x"$quiet_boot" = x0 ]; then
             message="$(gettext_printf "Loading device tree image ...")"
@@ -169,6 +156,15 @@ EOF
         echo "	boot" |sed "s/^/$submenu_indentation/"
     fi
     sed "s/^/$submenu_indentation/" << EOF
+EOF
+  fi
+  sed "s/^/$submenu_indentation/" << EOF
+	linux.vmlinux	\${boot}${linux} root=${linux_root_device_thisversion} ro ${args}
+EOF
+  sed "s/^/$submenu_indentation/" << EOF
+ 	boot
+EOF
+  sed "s/^/$submenu_indentation/" << EOF
 }
 EOF
 }
@@ -252,6 +248,6 @@ do
     # done
     menu_entry=$(printf "$(gettext -d deepin-upgrade-manager 'Rollback to %s')" "${rollback}")
     submenu_indentation="$grub_tab"
-    linux_entry "$menu_entry" "${LINUX}" "${INITRD}" "${GRUB_CMDLINE_LINUX} ${GRUB_CMDLINE_LINUX_DEFAULT} back_version=${rollback}"
+    linux_entry "$menu_entry" "${LINUX}" "${INITRD}" "${GRUB_CMDLINE_LINUX} ${GRUB_CMDLINE_LINUX_DEFAULT} rollback_version=${rollback}"
 done
 echo "}"

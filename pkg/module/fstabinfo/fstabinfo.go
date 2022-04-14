@@ -10,55 +10,71 @@ import (
 	"strings"
 )
 
-type MountInfo struct {
-	Partition  string
-	MountPoint string
-	FSType     string
-	Options    string
+type FsInfo struct {
+	SrcPoint  string
+	DestPoint string
+	FSType    string
+	Options   string
+	Bind      bool
 }
-type MountInfoList []*MountInfo
 
-func getPartition(spec, rootDir string) (string, error) {
+type FsInfoList []*FsInfo
+
+func getPartiton(spec string, dsInfos diskinfo.DiskIDList) (string, error) {
 	bits := strings.Split(spec, "=")
-	var specValue string
+	var specvalue string
 	var dsInfo *diskinfo.DiskID
 	if len(bits) == 1 {
-		specValue = spec
+		specvalue = spec
 	} else {
-		specValue = bits[1]
+		specvalue = bits[1]
 	}
-	diskDir := filepath.Join(rootDir, "dev/disk")
-	dsInfos, err := diskinfo.Load(diskDir)
-	if err != nil {
-		return "", err
-	}
+
 	switch strings.ToUpper(bits[0]) {
 	case "UUID":
-		dsInfo = dsInfos.MatchUUID(specValue)
+		dsInfo = dsInfos.MatchUUID(specvalue)
 	case "LABEL":
-		dsInfo = dsInfos.MatchLabel(specValue)
+		dsInfo = dsInfos.MatchLabel(specvalue)
 	case "PARTUUID":
-		dsInfo = dsInfos.MatchPartUUID(specValue)
+		dsInfo = dsInfos.MatchPartUUID(specvalue)
 	case "PARTLABEL":
-		dsInfo = dsInfos.MatchPartLabel(specValue)
+		dsInfo = dsInfos.MatchPartLabel(specvalue)
 	default:
-		dsInfo = dsInfos.MatchPartition(specValue)
+		dsInfo = dsInfos.MatchPartition(specvalue)
 	}
 	if nil == dsInfo {
-		return "", fmt.Errorf("cannot match the corresponding partition of the disk,specvalue:%s", specValue)
+		return "", fmt.Errorf("cannot match the corresponding partition of the disk,specvalue:%s", specvalue)
 	}
-	return dsInfo.Partition, err
+	return dsInfo.Partition, nil
+}
+
+func parseOptions(optionsString string) (options map[string]string) {
+	options = make(map[string]string)
+	var key, value string
+	for i, option := range strings.Split(optionsString, ",") {
+		if i == 0 {
+			key = option
+		} else {
+			value += option
+		}
+	}
+	options[key] = value
+	return
 }
 
 // /etc/fstab
-func Load(filename, rootDir string) (MountInfoList, error) {
+func Load(filename, rootDir string) (FsInfoList, error) {
 	logger.Debugf("load file %s to get mount information", filename)
 	fr, err := os.Open(filename)
 	if err != nil {
 		return nil, err
 	}
 	defer fr.Close()
-	var infos MountInfoList
+	var infos FsInfoList
+	dsInfos, err := diskinfo.Load("/dev/disk")
+	if err != nil {
+		return infos, err
+	}
 	scanner := bufio.NewScanner(fr)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -71,19 +87,30 @@ func Load(filename, rootDir string) (MountInfoList, error) {
 			logger.Warningf("too few fields (%d), at least 4 are expected", len(items))
 			continue
 		} else {
+			var srcMountPoint string
+			var isBind bool
 			if items[1] == "none" {
 				continue
 			}
-			partition, err := getPartition(items[0], rootDir)
-			if err != nil {
-				logger.Warning("failed get partiton, err:", err)
-				continue
+			optionsMap := parseOptions(items[3])
+			if items[3] == "bind" || optionsMap["defaults"] == "bind" {
+				srcMountPoint = filepath.Join(rootDir, items[0])
+				isBind = true
+			} else {
+				srcMountPoint, err = getPartiton(items[0], dsInfos)
+				if err != nil {
+					logger.Warning("failed get mount point, err:", err)
+					continue
+				}
+				isBind = false
 			}
-			infos = append(infos, &MountInfo{
-				Partition:  partition,
-				MountPoint: items[1],
-				FSType:     items[2],
-				Options:    items[3],
+
+			infos = append(infos, &FsInfo{
+				SrcPoint:  srcMountPoint,
+				DestPoint: items[1],
+				FSType:    items[2],
+				Options:   items[3],
+				Bind:      isBind,
 			})
 		}
 	}

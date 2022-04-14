@@ -23,7 +23,7 @@ const (
 )
 
 var (
-	_config  = flag.String("config", "/persistent/osroot/config.json", "the configuration file path")
+	_config  = flag.String("config", "/etc/deepin-upgrade-manager/config.json", "the configuration file path")
 	_action  = flag.String("action", "list", "the available actions: init, commit, rollback, list")
 	_version = flag.String("version", "", "the version which rollback")
 	_rootDir = flag.String("root", "/", "the rootfs mount point")
@@ -37,6 +37,7 @@ func main() {
 		fmt.Println("load config wrong:", err)
 		os.Exit(-1)
 	}
+
 	err = conf.Prepare()
 	if err != nil {
 		fmt.Println("config prepare wrong:", err)
@@ -50,7 +51,7 @@ func main() {
 	operator, err := upgrader.NewUpgrader(conf,
 		*_rootDir, "/proc/self/mounts")
 	if err != nil {
-		fmt.Println("new repo operator:", err)
+		logger.Error("new repo operator:", err)
 		os.Exit(-1)
 	}
 	switch *_action {
@@ -65,26 +66,31 @@ func main() {
 		fallthrough
 	case _ACTION_COMMIT:
 		if !single.SetSingleInstance() {
-			fmt.Println("process already exists")
+			logger.Error("process already exists")
 			os.Exit(-1)
 		}
 		if len(*_version) == 0 {
 			*_version, err = generateBranchName(conf)
 			if err != nil {
-				fmt.Println("generate version failed:", err)
+				logger.Error("generate version failed:", err)
 				os.Exit(-1)
 			}
 		}
 		logger.Info("the version number of this submission is:", *_version)
 		err = operator.Commit(*_version, fmt.Sprintf("Release %s", *_version), true)
 		if err != nil {
-			fmt.Println("commit failed:", err)
+			logger.Error("commit failed:", err)
+			os.Exit(-1)
+		}
+		err = operator.UpdateGrub()
+		if err != nil {
+			logger.Error("failed update grub, err:", err)
 			os.Exit(-1)
 		}
 		logger.Info("ending commit a new version")
 	case _ACTION_ROLLBACK:
 		if !single.SetSingleInstance() {
-			fmt.Println("process already exists")
+			logger.Error("process already exists")
 			os.Exit(-1)
 		}
 		logger.Info("start rollback a old version:", *_version)
@@ -93,7 +99,7 @@ func main() {
 			os.Exit(-1)
 		}
 		// NOTICE(jouyouyun): must ensure the partition which in fstab had mounted.
-		err = operator.Rollback(*_version)
+		err = operator.Rollback(*_version, conf)
 		if err != nil {
 			logger.Errorf("rollback %q: %v", *_version, err)
 			os.Exit(-1)
@@ -104,7 +110,7 @@ func main() {
 			logger.Error("Must special version")
 			os.Exit(-1)
 		}
-		err = operator.Snapshot(*_version, true)
+		_, err = operator.Snapshot(*_version, true)
 		if err != nil {
 			logger.Errorf("snapshot %q: %v", *_version, err)
 			os.Exit(-1)
@@ -120,7 +126,6 @@ func main() {
 		fmt.Printf("AvailVersionList:%s\n", strings.Join(verList, " "))
 		return
 	}
-
 	conf.ActiveVersion = *_version
 	err = conf.Save()
 	if err != nil {
@@ -129,12 +134,15 @@ func main() {
 }
 
 func generateBranchName(conf *config.Config) (string, error) {
+
 	name := conf.ActiveVersion
+	logger.Debug("active:", name)
 	if len(name) != 0 {
 		newName, err := branch.Increment(name)
 		if err == nil {
 			return newName, nil
 		}
+		logger.Debug("newName:", newName)
 	}
 
 	if len(conf.RepoList) != 1 {

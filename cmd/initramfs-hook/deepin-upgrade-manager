@@ -19,7 +19,9 @@ esac
 . /usr/share/initramfs-tools/hook-functions
 
 UPGRADER="/usr/sbin/deepin-upgrade-manager"
+CP="/usr/bin/cp"
 if [ -x ${UPGRADER} ]
 then
     copy_exec ${UPGRADER} /usr/sbin
+    copy_exec ${CP} /usr/bin
 fi
