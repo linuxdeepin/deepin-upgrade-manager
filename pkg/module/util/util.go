@@ -229,15 +229,36 @@ func MoveDirSubFile(orig, dst, newDir string, filter []string) error {
 // @param     orig         		string         		"sub dir, ex:/etc/2020"
 // @param     dst         		string         		"out dir, ex:/etc"
 func SubMoveOut(orig, dst string) error {
+	err := Mkdir(orig, dst)
+	if err != nil {
+		return err
+	}
 
 	fiList, err := ioutil.ReadDir(orig)
 	if err != nil {
 		return err
 	}
+
 	for _, fi := range fiList {
-		origSub := filepath.Join(orig, fi.Name())
+		srcSub := filepath.Join(orig, fi.Name())
 		dstSub := filepath.Join(dst, fi.Name())
-		os.Rename(origSub, dstSub)
+
+		fiStat, ok := fi.Sys().(*syscall.Stat_t)
+		if !ok {
+			return fmt.Errorf("failed to get raw stat for: %s", srcSub)
+		}
+
+		switch {
+		case fiStat.Mode&syscall.S_IFDIR == syscall.S_IFDIR:
+			err = SubMoveOut(srcSub, dstSub)
+		case fiStat.Mode&syscall.S_IFREG == syscall.S_IFREG:
+			os.Rename(srcSub, dstSub)
+		default:
+			logger.Debug("unknown file type:", srcSub)
+		}
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
