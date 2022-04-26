@@ -3,7 +3,9 @@
   "distribution": "v23",
   "active_version": "20220210",
   "cache_dir": "/usr/.osrepo-cache",
+  "auto_cleanup": "true",
   "max_repo_retention": 3,
+  "max_version_retention": 5,
   "repo_list": [
     {
       "repo": "/persistent/osroot/repo",

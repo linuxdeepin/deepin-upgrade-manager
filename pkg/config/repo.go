@@ -24,9 +24,11 @@ type Config struct {
 	ActiveVersion string `json:"active_version"`
 	CacheDir      string `json:"cache_dir"`
 
-	RepoList RepoListConfig `json:"repo_list"`
+	AutoCleanup bool           `json:"auto_cleanup"`
+	RepoList    RepoListConfig `json:"repo_list"`
 
-	MaxRepoRetention int32 `json:"max_repo_retention"`
+	MaxVersionRetention int32 `json:"max_version_retention"`
+	MaxRepoRetention    int32 `json:"max_repo_retention"`
 }
 
 func (c *Config) Prepare() error {

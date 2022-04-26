@@ -20,6 +20,7 @@ const (
 	_ACTION_ROLLBACK = "rollback"
 	_ACTION_SNAPSHOT = "snapshot"
 	_ACTION_LIST     = "list"
+	_ACTION_DELETE   = "delete"
 )
 
 var (
@@ -82,6 +83,13 @@ func main() {
 			logger.Error("commit failed:", err)
 			os.Exit(-1)
 		}
+		if isAutoClean(conf) {
+			err = operator.RepoAutoCleanup(conf)
+			if err != nil {
+				logger.Error("failed auto cleanup repo, err:", err)
+			}
+		}
+
 		err = operator.UpdateGrub()
 		if err != nil {
 			logger.Error("failed update grub, err:", err)
@@ -124,6 +132,18 @@ func main() {
 		}
 		fmt.Printf("ActiveVersion:%s\n", conf.ActiveVersion)
 		fmt.Printf("AvailVersionList:%s\n", strings.Join(verList, " "))
+		return
+	case _ACTION_DELETE:
+		err := operator.Delete(conf, *_version)
+		if err != nil {
+			logger.Error("failed delete version:", err)
+			os.Exit(-1)
+		}
+		err = operator.UpdateGrub()
+		if err != nil {
+			logger.Error("failed update grub, err:", err)
+			os.Exit(-1)
+		}
 		return
 	}
 	conf.ActiveVersion = *_version
@@ -172,4 +192,11 @@ func listVersion(conf *config.Config) ([]string, error) {
 		return nil, err
 	}
 	return handler.List()
+}
+
+func isAutoClean(conf *config.Config) bool {
+	if len(conf.RepoList) == 0 {
+		return true
+	}
+	return conf.AutoCleanup
 }

@@ -186,6 +186,38 @@ func (repo *OSTree) listRefs() (branch.BranchList, error) {
 	return refs, nil
 }
 
+func (repo *OSTree) Delete(branchName string) error {
+	if !repo.Exist(branchName) {
+		return fmt.Errorf("branch does not exist")
+	}
+	refs, err := repo.listRefs()
+	if err != nil {
+		return err
+	}
+	if refs[len(refs)-1] == branchName {
+		return fmt.Errorf("the first version cannot be deleted")
+	}
+	out, err := doAction([]string{"log", "--repo=" + repo.repoDir, branchName})
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(string(out), "\n")
+	rows := strings.Fields(lines[0])
+	if len(rows) < 2 {
+		return fmt.Errorf("commit does not exist")
+	}
+	commit := strings.TrimSpace(rows[1])
+	_, err = doAction([]string{"refs", "--repo=" + repo.repoDir, "--delete", branchName})
+	if err != nil {
+		return err
+	}
+	_, err = doAction([]string{"prune", "--repo=" + repo.repoDir, "--delete-commit=" + commit})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func doAction(args []string) ([]byte, error) {
 	out, err := exec.Command("ostree", args...).CombinedOutput()
 	if err != nil {

@@ -417,3 +417,58 @@ func (c *Upgrader) updataLoaclMount(snapDir string) (mountpoint.MountPointList, 
 	}
 	return mountedPointList, nil
 }
+
+func (c *Upgrader) RepoAutoCleanup(conf *config.Config) error {
+	handler, err := repo.NewRepo(repo.REPO_TY_OSTREE,
+		filepath.Join(c.rootMP, conf.RepoList[0].Repo))
+	if err != nil {
+		return err
+	}
+	maxVersion := int(conf.MaxVersionRetention)
+	list, err := handler.List()
+	if err != nil {
+		return err
+	}
+	if len(list) <= maxVersion {
+		logger.Infof("current version is less than %d, no need for auto cleanup", maxVersion)
+		return nil
+	}
+	logger.Infof("current version is more than %d, need for cleanup repo", maxVersion)
+
+	for i, v := range list {
+		if i == len(list)-1 {
+			continue
+		}
+		if i < maxVersion-1 {
+			continue
+		}
+		err = c.Delete(conf, v)
+		if err != nil {
+			logger.Warning(err)
+			break
+		}
+	}
+	return nil
+}
+
+func (c *Upgrader) Delete(conf *config.Config, version string) error {
+	if len(conf.RepoList) == 0 || len(version) == 0 {
+		return errors.New("branch does not exist")
+	}
+	if version == conf.ActiveVersion {
+		return errors.New("the current activated version does not allow deletion")
+	}
+	handler, err := repo.NewRepo(repo.REPO_TY_OSTREE,
+		filepath.Join(c.rootMP, conf.RepoList[0].Repo))
+	if err != nil {
+		return err
+	}
+	err = handler.Delete(version)
+	if err != nil {
+		return err
+	}
+	snapshotDir := filepath.Join(c.rootMP, conf.RepoList[0].SnapshotDir, version)
+	logger.Debug("delete tmp snapshot directory:", snapshotDir)
+	_ = os.RemoveAll(snapshotDir)
+	return nil
+}
