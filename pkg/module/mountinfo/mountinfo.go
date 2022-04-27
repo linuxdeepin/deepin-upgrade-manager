@@ -19,6 +19,7 @@ type MountInfo struct {
 	FSType     string
 	Options    string
 }
+
 type MountInfoList []*MountInfo
 
 func (infos MountInfoList) Query(dir string) MountInfoList {
@@ -39,6 +40,16 @@ func (infos MountInfoList) Match(dir string) *MountInfo {
 		}
 	}
 	return nil
+}
+
+func isExist(info MountInfo, list MountInfoList) bool {
+	for _, v := range list {
+		if info.FSType == v.FSType && info.MountPoint == v.MountPoint &&
+			info.Options == v.Options && info.Partition == v.Partition {
+			return true
+		}
+	}
+	return false
 }
 
 func Load(filename string) (MountInfoList, error) {
@@ -63,12 +74,16 @@ func Load(filename string) (MountInfoList, error) {
 		if isFilterFSType(items[2]) {
 			continue
 		}
-		infos = append(infos, &MountInfo{
+		mountInfo := &MountInfo{
 			Partition:  items[0],
 			MountPoint: items[1],
 			FSType:     items[2],
 			Options:    items[3],
-		})
+		}
+		if isExist(*mountInfo, infos) {
+			continue
+		}
+		infos = append(infos, mountInfo)
 	}
 	return infos, nil
 }

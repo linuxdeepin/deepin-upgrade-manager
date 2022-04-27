@@ -252,7 +252,7 @@ func SubMoveOut(orig, dst string) error {
 		case fiStat.Mode&syscall.S_IFDIR == syscall.S_IFDIR:
 			err = SubMoveOut(srcSub, dstSub)
 		case fiStat.Mode&syscall.S_IFREG == syscall.S_IFREG:
-			os.Rename(srcSub, dstSub)
+			err = os.Rename(srcSub, dstSub)
 		default:
 			logger.Debug("unknown file type:", srcSub)
 		}

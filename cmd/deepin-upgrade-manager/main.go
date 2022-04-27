@@ -49,8 +49,9 @@ func main() {
 	} else {
 		logger.NewLogger("deepin-upgrade-manager", true)
 	}
+	selfMountPath := "/proc/self/mounts"
 	operator, err := upgrader.NewUpgrader(conf,
-		*_rootDir, "/proc/self/mounts")
+		*_rootDir, selfMountPath)
 	if err != nil {
 		logger.Error("new repo operator:", err)
 		os.Exit(-1)
@@ -107,7 +108,7 @@ func main() {
 			os.Exit(-1)
 		}
 		// NOTICE(jouyouyun): must ensure the partition which in fstab had mounted.
-		err = operator.Rollback(*_version, conf)
+		err = operator.Rollback(*_version, selfMountPath, conf)
 		if err != nil {
 			logger.Errorf("rollback %q: %v", *_version, err)
 			os.Exit(-1)
@@ -118,7 +119,7 @@ func main() {
 			logger.Error("Must special version")
 			os.Exit(-1)
 		}
-		_, err = operator.Snapshot(*_version, true)
+		_, err = operator.Snapshot(*_version, selfMountPath, true)
 		if err != nil {
 			logger.Errorf("snapshot %q: %v", *_version, err)
 			os.Exit(-1)

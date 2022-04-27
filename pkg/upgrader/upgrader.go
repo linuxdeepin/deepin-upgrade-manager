@@ -74,10 +74,10 @@ func (c *Upgrader) UpdateGrub() error {
 	return err
 }
 
-func (c *Upgrader) Snapshot(version string, bootEnabled bool) ([]mountpoint.MountPointList, error) {
+func (c *Upgrader) Snapshot(version, selfmountpath string, bootEnabled bool) ([]mountpoint.MountPointList, error) {
 	var mountedPointRepoList []mountpoint.MountPointList
 	for _, v := range c.conf.RepoList {
-		mountedPointList, err := c.repoSnapshot(v, version, bootEnabled)
+		mountedPointList, err := c.repoSnapshot(v, version, selfmountpath, bootEnabled)
 		if err != nil {
 			return mountedPointRepoList, err
 		}
@@ -86,8 +86,8 @@ func (c *Upgrader) Snapshot(version string, bootEnabled bool) ([]mountpoint.Moun
 	return mountedPointRepoList, nil
 }
 
-func (c *Upgrader) Rollback(version string, conf *config.Config) error {
-	mountedPointRepoList, err := c.Snapshot(version, false)
+func (c *Upgrader) Rollback(version, selfmountpath string, conf *config.Config) error {
+	mountedPointRepoList, err := c.Snapshot(version, selfmountpath, false)
 	if err != nil {
 		return err
 	}
@@ -143,7 +143,7 @@ func (c *Upgrader) repoCommit(repoConf *config.RepoConfig, newVersion, subject s
 	return nil
 }
 
-func (c *Upgrader) repoSnapshot(repoConf *config.RepoConfig, version string,
+func (c *Upgrader) repoSnapshot(repoConf *config.RepoConfig, version, selfmountpath string,
 	bootEnabled bool) (mountpoint.MountPointList, error) {
 	var mountedPointList mountpoint.MountPointList
 	handler := c.repoSet[repoConf.Repo]
@@ -162,6 +162,12 @@ func (c *Upgrader) repoSnapshot(repoConf *config.RepoConfig, version string,
 				return mountedPointList, err
 			}
 		}
+		mountinfos, err := mountinfo.Load(selfmountpath)
+		logger.Infof("to update the local mount, you need to reload the mount information")
+		if err != nil {
+			return nil, err
+		}
+		c.mountInfos = mountinfos
 	} else {
 		err := c.enableSnapshotBoot(dataDir, version)
 		if err != nil {
@@ -231,7 +237,7 @@ func (c *Upgrader) handleRepoRollbak(realDir, snapDir, version string,
 	var filterDir []string
 	var rollbackDir string
 	var err error
-	list := c.mountInfos.Query(realDir)
+	list := c.mountInfos.Query(filepath.Join(c.rootMP, realDir))
 	logger.Debugf("start rolling back, realDir:%s, snapDir:%s, version:%s, list len:%d",
 		realDir, snapDir, version, len(list))
 	if len(list) > 0 {
@@ -292,9 +298,13 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 			return err
 		}
 	}
+	logger.Debug("need to be deleted tmp dirs:", rollbackDirList)
 	for _, v := range rollbackDirList {
 		if util.IsExists(v) {
-			os.RemoveAll(v)
+			err := os.RemoveAll(v)
+			if err != nil {
+				logger.Warning("failed remove dir, err:", err)
+			}
 		}
 	}
 	return nil
