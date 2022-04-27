@@ -6,6 +6,7 @@ PWD=$(shell pwd)
 GOCODE=/usr/share/gocode
 GOPATH_DIR=gopath
 CURRENT_DIR=$(notdir $(shell pwd))
+ARCH=$(shell arch)
 export GO111MODULE=off
 
 all: build
@@ -27,6 +28,10 @@ build: prepare
 	@env GOPATH=${PWD}/${GOPATH_DIR}:${GOCODE}:${GOPATH} go build -o ${PWD}/${PROG_UPGRADER} ${PRJ}/cmd/${PROG_UPGRADER}
 
 install:
+ifeq ($(ARCH),sw_64)
+	mkdir -p ${DESTDIR}/etc/grub.d/sw64
+	cp -f ${PWD}/cmd/grub.d/sw/15_deepin-upgrade-manager ${DESTDIR}/etc/grub.d/sw64
+endif
 	@mkdir -p ${DESTDIR}/etc/${PRJ}/
 	@cp -f ${PWD}/configs/config.simple.json  ${DESTDIR}/etc/${PRJ}/config.json
 	@mkdir -p ${DESTDIR}${PREFIX}/share/dbus-1/system.d/
@@ -38,7 +43,6 @@ install:
 	@mkdir -p ${DESTDIR}/etc/grub.d ${DESTDIR}/etc/default/grub.d
 	@cp -f ${PWD}/cmd/grub.d/10_deepin-upgrade-manager.cfg ${DESTDIR}/etc/default/grub.d
 	@cp -f ${PWD}/cmd/grub.d/15_deepin-upgrade-manager ${DESTDIR}/etc/grub.d
-	@cp -f ${PWD}/cmd/grub.d/sw/15_deepin-upgrade-manager ${DESTDIR}/etc/default/grub.d/sw
 	@mkdir -p ${DESTDIR}${PREFIX}/share/initramfs-tools/hooks
 	@cp -f ${PWD}/cmd/initramfs-hook/* ${DESTDIR}${PREFIX}/share/initramfs-tools/hooks/
 	@mkdir -p ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom
@@ -48,6 +52,9 @@ install:
 	@cp -rf ${PWD}/scripts/dpkg.cfg.d ${DESTDIR}${PREFIX}/share/${PRJ}/
 
 uninstall:
+ifeq ($(ARCH),sw_64)
+	rm -f ${DESTDIR}/etc/grub.d/sw64/15_deepin-upgrade-manager
+endif
 	@rm -f ${DESTDIR}${PREFIX}/sbin/${PROG_UPGRADER}
 	@rm -f ${DESTDIR}${PREFIX}/share/dbus-1/system.d/${PROG_DBUS}.conf
 	@rm -f ${DESTDIR}${PREFIX}/share/dbus-1/system-services/${PROG_DBUS}.service

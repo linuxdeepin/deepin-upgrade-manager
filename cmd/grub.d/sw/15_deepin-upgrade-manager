@@ -248,6 +248,6 @@ do
     # done
     menu_entry=$(printf "$(gettext -d deepin-upgrade-manager 'Rollback to %s')" "${rollback}")
     submenu_indentation="$grub_tab"
-    linux_entry "$menu_entry" "${LINUX}" "${INITRD}" "${GRUB_CMDLINE_LINUX} ${GRUB_CMDLINE_LINUX_DEFAULT} rollback_version=${rollback}"
+    linux_entry "$menu_entry" "${LINUX}" "${INITRD}" "${GRUB_CMDLINE_LINUX} ${GRUB_CMDLINE_LINUX_DEFAULT} back_version=${rollback}"
 done
 echo "}"

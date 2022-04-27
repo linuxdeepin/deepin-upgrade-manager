@@ -3,7 +3,6 @@ dir=$(cd $(dirname $0);pwd)
 . $(dirname $dir)/functions
 . $(dirname $dir)/local
 . $(dirname $dir)/nfs
-set -e
 
 PREREQ=""
 prereqs()
