@@ -470,5 +470,8 @@ func (c *Upgrader) Delete(conf *config.Config, version string) error {
 	snapshotDir := filepath.Join(c.rootMP, conf.RepoList[0].SnapshotDir, version)
 	logger.Debug("delete tmp snapshot directory:", snapshotDir)
 	_ = os.RemoveAll(snapshotDir)
+	bootDir := filepath.Join(c.rootMP, "boot/snapshot", version)
+	logger.Debug("delete kernel snapshot directory:", bootDir)
+	_ = os.RemoveAll(bootDir)
 	return nil
 }
