@@ -156,15 +156,12 @@ func main() {
 func generateBranchName(conf *config.Config) (string, error) {
 
 	name := conf.ActiveVersion
-	logger.Debug("active:", name)
 	if len(name) != 0 {
 		newName, err := branch.Increment(name)
 		if err == nil {
 			return newName, nil
 		}
-		logger.Debug("newName:", newName)
 	}
-
 	if len(conf.RepoList) != 1 {
 		handler, err := repo.NewRepo(repo.REPO_TY_OSTREE,
 			conf.RepoList[0].Repo)
