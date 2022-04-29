@@ -154,27 +154,18 @@ func main() {
 }
 
 func generateBranchName(conf *config.Config) (string, error) {
-
-	name := conf.ActiveVersion
-	if len(name) != 0 {
-		newName, err := branch.Increment(name)
-		if err == nil {
-			return newName, nil
-		}
-	}
-	if len(conf.RepoList) != 1 {
+	if len(conf.RepoList) != 0 {
 		handler, err := repo.NewRepo(repo.REPO_TY_OSTREE,
 			conf.RepoList[0].Repo)
 		if err != nil {
 			return "", err
 		}
-		name, err = handler.Last()
+		name, err := handler.Last()
 		if err != nil {
 			return "", err
 		}
 		return branch.Increment(name)
 	}
-
 	return branch.GenInitName(conf.Distribution), nil
 }
 
