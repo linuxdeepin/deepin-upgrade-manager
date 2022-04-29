@@ -199,7 +199,7 @@ func (c *Upgrader) enableSnapshotBoot(snapDir, version string) error {
 			snapFile := filepath.Join(bootDir, fi.Name())
 			localFile := filepath.Join(localBootDir, fi.Name())
 			dstFile := filepath.Join(dstDir, fi.Name())
-			isSame, err := util.IsFileSame(localBootDir, snapFile)
+			isSame, err := util.IsFileSame(localFile, snapFile)
 			if isSame && err == nil {
 				err = util.CopyFile(localFile, dstFile, true)
 			} else {
