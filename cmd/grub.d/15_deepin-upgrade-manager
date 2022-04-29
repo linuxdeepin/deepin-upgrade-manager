@@ -18,7 +18,7 @@ SNAPSHOT_DIR_PREFIX=/boot/snapshot
 SNAPSHOT_DIR=/snapshot
 
 if [ "x${DEEPIN_UPGRADER_VERSION_LIMIT}" = "x" ]; then
-    DEEPIN_UPGRADER_VERSION_LIMIT=3
+    DEEPIN_UPGRADER_VERSION_LIMIT=5
 fi
 
 if [ ! -f ${UPGRADER} ];then

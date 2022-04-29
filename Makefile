@@ -36,7 +36,7 @@ install:
 	@mkdir -p ${DESTDIR}${PREFIX}/sbin
 	@cp -f ${PWD}/${PROG_UPGRADER} ${DESTDIR}${PREFIX}/sbin/
 	@mkdir -p ${DESTDIR}/etc/grub.d ${DESTDIR}/etc/default/grub.d
-	@cp -f ${PWD}/cmd/grub.d/10_deepin-upgrade-manager ${DESTDIR}/etc/default/grub.d
+	@cp -f ${PWD}/cmd/grub.d/10_deepin-upgrade-manager.cfg ${DESTDIR}/etc/default/grub.d
 	@cp -f ${PWD}/cmd/grub.d/15_deepin-upgrade-manager ${DESTDIR}/etc/grub.d
 	@cp -f ${PWD}/cmd/grub.d/sw/15_deepin-upgrade-manager ${DESTDIR}/etc/default/grub.d/sw
 	@mkdir -p ${DESTDIR}${PREFIX}/share/initramfs-tools/hooks
@@ -52,7 +52,7 @@ uninstall:
 	@rm -f ${DESTDIR}${PREFIX}/share/dbus-1/system.d/${PROG_DBUS}.conf
 	@rm -f ${DESTDIR}${PREFIX}/share/dbus-1/system-services/${PROG_DBUS}.service
 	@rm -f ${DESTDIR}/etc/${PRJ}/config.json
-	@rm -f ${DESTDIR}/etc/default/grub.d/10_deepin-upgrade-manager
+	@rm -f ${DESTDIR}/etc/default/grub.d/10_deepin-upgrade-manager.cfg
 	@rm -f ${DESTDIR}/etc/grub.d/15_deepin-upgrade-manager
 	@rm -f ${DESTDIR}${PREFIX}/share/initramfs-tools/hooks/ostree
 	@rm -f ${DESTDIR}${PREFIX}/share/initramfs-tools/hooks/${PROG_UPGRADER}
