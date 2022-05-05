@@ -64,6 +64,7 @@ func Increment(branchName string) (string, error) {
 		minor++
 	} else {
 		major++
+		minor = 0
 	}
 	return items[0] + BRANCH_DELIM + strconv.FormatInt(major, 10) +
 		BRANCH_DELIM + strconv.FormatInt(minor, 10) + BRANCH_DELIM + date, nil
