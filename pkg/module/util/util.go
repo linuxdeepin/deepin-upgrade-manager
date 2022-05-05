@@ -170,6 +170,10 @@ func GetRealDirList(list []string, rootDir string) []string {
 			logger.Infof("dir %s is the same root as dir %s, need ignore dir %s", real, v, dir)
 			continue
 		}
+		if !IsExists(dir) {
+			logger.Infof("%s does not exist, need ignore", dir)
+			continue
+		}
 		newList = append(newList, v)
 	}
 	return newList
@@ -211,7 +215,7 @@ func MoveDirSubFile(orig, dst, newDir string, filter []string) error {
 		if len(filterRoots) > 0 && IsExistsPath(filterRoots, origSub) {
 			continue
 		}
-		if fi.Name() == newDir {
+		if origSub == newDir {
 			continue
 		}
 		os.Rename(origSub, dstSub)
@@ -622,20 +626,35 @@ func HandlerDirPrepare(src, dst, version, rootdir string, filter []string) (stri
 	return dir, CompareDirAndCopy(src, dir, dst, filter)
 }
 
-// @title    HandlerDirReplace
+func handlerDirReplace(dst, newDir, dir string, filter []string) (string, error) {
+	err := MoveDirSubFile(dst, dir, newDir, filter)
+	if err != nil {
+		return "", err
+	}
+
+	if IsExists(newDir) {
+		logger.Debugf("start file replacement, dst:%s, newDir:%s", dst, newDir)
+		err := SubMoveOut(newDir, dst)
+		if err != nil {
+			logger.Warningf("failed move sub dir, orig:%s, newDir:%s", dst, newDir)
+		}
+	}
+	return dir, nil
+}
+
+// @title    HandlerDirRollback
 // @description   file replace on rollback
 // @param     src         		string         		"snapshot dir, ex:/persitent/osroot/v23/2020/etc"
 // @param     dst         		string         		"dir to be rolled back, ex:/etc"
 // @param     version         	string         		"snapshot version, ex:v23.0.0.1"
 // @param     filter		    *[]string      		"list of files to filter"
 // @return    dir				string   			"generated temporary directory"
-func HandlerDirReplace(src, dst, version, rootdir string, filter []string) (string, error) {
+func HandlerDirRollback(src, dst, version, rootdir string, filter []string) (string, error) {
 	dst = filepath.Join(rootdir, dst)
 	src = filepath.Join(rootdir, src)
-
-	newFile := string(".") + version
-	newDir := filepath.Join(dst, newFile)
+	newDir := filepath.Join(dst, string(".")+version)
 	dir := filepath.Join(dst, string("/.old")+version)
+
 	if IsExists(dir) {
 		os.RemoveAll(dir)
 	}
@@ -644,16 +663,26 @@ func HandlerDirReplace(src, dst, version, rootdir string, filter []string) (stri
 	if err != nil {
 		return "", err
 	}
-	err = MoveDirSubFile(dst, dir, newFile, filter)
-	if err != nil {
-		return "", err
+	return handlerDirReplace(dst, newDir, dir, filter)
+}
+
+// @title    HandlerDirRecover
+// @description   file replace on rollback
+// @param     src         		string         		"snapshot dir, ex:/persitent/osroot/v23/2020/etc"
+// @param     dst         		string         		"dir to be rolled back, ex:/etc"
+// @param     version         	string         		"snapshot version, ex:v23.0.0.1"
+// @param     filter		    *[]string      		"list of files to filter"
+// @return    dir				string   			"generated temporary directory"
+func HandlerDirRecover(src, dst, version, rootdir string, filter []string) (string, error) {
+	dst = filepath.Join(rootdir, dst)
+	src = filepath.Join(rootdir, src)
+	newDir := filepath.Join(dst, string(".")+version)
+	dir := filepath.Join(dst, string("/.old")+version)
+
+	if !IsExists(dir) {
+		logger.Infof("%s are not rolled back and do not need to be restored", dir)
+		return "", nil
 	}
-	if IsExists(newDir) {
-		logger.Debugf("start file replacement,dst:%s,newDir:%s", dst, newDir)
-		err := SubMoveOut(newDir, dst)
-		if err != nil {
-			logger.Warningf("failed move sub dir,orig:%s,newDir:%s", dst, newDir)
-		}
-	}
-	return dir, nil
+	logger.Debugf("start replace the dir, src:%s, dir:%s, dst:%s, version:%s", src, dir, dst, version)
+	return handlerDirReplace(dst, dir, newDir, filter)
 }

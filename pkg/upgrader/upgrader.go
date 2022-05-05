@@ -278,13 +278,17 @@ func (c *Upgrader) handleRepoRollbak(realDir, snapDir, version string,
 	rollbackDir, err = HandlerDir(filepath.Join(snapDir+realDir), realDir, version, c.rootMP, filterDir)
 	if err != nil {
 		logger.Warningf("fail rollback dir:%s,err:%v", realDir, err)
+		return err
 	} else {
 		*rollbackDirList = append(*rollbackDirList, rollbackDir)
 		logger.Debug("rollbackDir:", rollbackDir)
 	}
 
 	for _, l := range filterDir {
-		c.handleRepoRollbak(l, snapDir, version, rollbackDirList, HandlerDir)
+		err = c.handleRepoRollbak(l, snapDir, version, rollbackDirList, HandlerDir)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -293,8 +297,29 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 	var rollbackDirList []string
 	snapDir := filepath.Join(repoConf.SnapshotDir, version)
 	realSubscribeList := util.GetRealDirList(repoConf.SubscribeList, c.rootMP)
+	var err error
+	defer func() {
+		if err != nil {
+			logger.Warning("failed rollback, recover rollback action")
+			for _, dir := range realSubscribeList {
+				err := c.handleRepoRollbak(dir, snapDir, version, &rollbackDirList, util.HandlerDirRecover)
+				if err != nil {
+					logger.Error("failed recover rollback, err:", err)
+				}
+			}
+		}
+		logger.Debug("need to be deleted tmp dirs:", rollbackDirList)
+		for _, v := range rollbackDirList {
+			if util.IsExists(v) {
+				err = os.RemoveAll(v)
+				if err != nil {
+					logger.Warning("failed remove dir, err:", err)
+				}
+			}
+		}
+	}()
 	for _, dir := range realSubscribeList {
-		err := c.handleRepoRollbak(dir, snapDir, version, &rollbackDirList, util.HandlerDirPrepare)
+		err = c.handleRepoRollbak(dir, snapDir, version, &rollbackDirList, util.HandlerDirPrepare)
 		if err != nil {
 			return err
 		}
@@ -307,24 +332,15 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 			bootDir = dir
 			continue
 		}
-		err := c.handleRepoRollbak(dir, snapDir, version, &rollbackDirList, util.HandlerDirReplace)
+		err = c.handleRepoRollbak(dir, snapDir, version, &rollbackDirList, util.HandlerDirRollback)
 		if err != nil {
 			return err
 		}
 	}
 	if len(bootDir) != 0 {
-		err := c.handleRepoRollbak(bootDir, snapDir, version, &rollbackDirList, util.HandlerDirReplace)
+		err = c.handleRepoRollbak(bootDir, snapDir, version, &rollbackDirList, util.HandlerDirRollback)
 		if err != nil {
 			return err
-		}
-	}
-	logger.Debug("need to be deleted tmp dirs:", rollbackDirList)
-	for _, v := range rollbackDirList {
-		if util.IsExists(v) {
-			err := os.RemoveAll(v)
-			if err != nil {
-				logger.Warning("failed remove dir, err:", err)
-			}
 		}
 	}
 	return nil
