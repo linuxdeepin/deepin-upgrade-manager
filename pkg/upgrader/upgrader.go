@@ -68,6 +68,26 @@ func (c *Upgrader) Commit(newVersion, subject string, useSysData bool) error {
 	return nil
 }
 
+func (c *Upgrader) IsExists() bool {
+	for _, v := range c.conf.RepoList {
+		if !util.IsExists(v.Repo) {
+			logger.Debugf("%s does not exist", v.Repo)
+			return false
+		}
+		handler := c.repoSet[v.Repo]
+		list, err := handler.List()
+		if err != nil {
+			logger.Debugf("%s does not exist", v.Repo)
+			return false
+		}
+		if len(list) == 0 {
+			logger.Debugf("%s does not exist", v.Repo)
+			return false
+		}
+	}
+	return true
+}
+
 func (c *Upgrader) UpdateGrub() error {
 	logger.Info("start update grub")
 	err := util.ExecCommand("update-grub", []string{})

@@ -59,6 +59,10 @@ func main() {
 	switch *_action {
 	case _ACTION_INIT:
 		logger.Info("start initialize a new empty repo")
+		if operator.IsExists() {
+			logger.Error("failed to initialize because repository exists")
+			os.Exit(-1)
+		}
 		err = operator.Init()
 		if err != nil {
 			logger.Error("init repo failed:", err)
