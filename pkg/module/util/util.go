@@ -21,6 +21,50 @@ const (
 	MinRandomLen = 10
 )
 
+const (
+	_envNamePath = "PATH"
+	_envDelim    = ":"
+)
+
+func FixEnvPath() error {
+	var (
+		defaultPath string
+		oldPath     string
+	)
+	var (
+		defaultItems = []string{
+			"/bin",
+			"/usr/bin",
+			"/sbin",
+			"/usr/sbin",
+		}
+		oldItems []string
+		items    []string
+	)
+
+	oldPath = os.Getenv(_envNamePath)
+	if len(oldPath) == 0 {
+		defaultPath = strings.Join(defaultItems, _envDelim)
+		goto fix
+	}
+
+	oldItems = strings.Split(oldPath, _envDelim)
+	for _, v := range defaultItems {
+		if IsItemInList(v, oldItems) {
+			continue
+		}
+		items = append(items, v)
+	}
+
+	if len(items) == 0 {
+		return nil
+	}
+	defaultPath = strings.Join(items, _envDelim) + ":" + oldPath
+
+fix:
+	return os.Setenv(_envNamePath, defaultPath)
+}
+
 func IsExists(filename string) bool {
 	_, err := os.Stat(filename)
 	if err == nil || os.IsExist(err) {

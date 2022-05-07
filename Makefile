@@ -1,6 +1,6 @@
 PRJ=deepin-upgrade-manager
 PROG_UPGRADER=${PRJ}
-PROG_DBUS=org.deepin.Upgrade
+PROG_DBUS=org.deepin.AtomicUpgrade
 PREFIX=/usr
 PWD=$(shell pwd)
 GOCODE=/usr/share/gocode

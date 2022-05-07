@@ -8,13 +8,54 @@ import (
 	"deepin-upgrade-manager/pkg/module/mountinfo"
 	"deepin-upgrade-manager/pkg/module/mountpoint"
 	"deepin-upgrade-manager/pkg/module/repo"
+	"deepin-upgrade-manager/pkg/module/repo/branch"
 	"deepin-upgrade-manager/pkg/module/util"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
 )
+
+type (
+	opType    int32
+	stateType int32
+)
+
+const (
+	SelfMountPath = "/proc/self/mounts"
+)
+
+const (
+	_OP_TY_ROLLBACK opType = iota + 1
+	_OP_TY_COMMIT
+)
+
+const (
+	_STATE_TY_SUCCESS stateType = iota + 1
+	_STATE_TY_FAILED
+)
+
+func (state stateType) String() string {
+	switch state {
+	case _STATE_TY_SUCCESS:
+		return "success"
+	case _STATE_TY_FAILED:
+		return "failed"
+	}
+	return "unknown"
+}
+
+func (op opType) String() string {
+	switch op {
+	case _OP_TY_ROLLBACK:
+		return "rollback"
+	case _OP_TY_COMMIT:
+		return "commit"
+	}
+	return "unknown"
+}
 
 type Upgrader struct {
 	conf *config.Config
@@ -27,8 +68,8 @@ type Upgrader struct {
 }
 
 func NewUpgrader(conf *config.Config,
-	rootMP, mountsFile string) (*Upgrader, error) {
-	mountInfos, err := mountinfo.Load(mountsFile)
+	rootMP string) (*Upgrader, error) {
+	mountInfos, err := mountinfo.Load(SelfMountPath)
 	if err != nil {
 		return nil, err
 	}
@@ -49,6 +90,9 @@ func NewUpgrader(conf *config.Config,
 }
 
 func (c *Upgrader) Init() error {
+	if c.IsExists() {
+		return errors.New("failed to initialize because repository exists")
+	}
 	for _, handler := range c.repoSet {
 		err := handler.Init()
 		if err != nil {
@@ -58,14 +102,51 @@ func (c *Upgrader) Init() error {
 	return nil
 }
 
-func (c *Upgrader) Commit(newVersion, subject string, useSysData bool) error {
-	for _, v := range c.conf.RepoList {
-		err := c.repoCommit(v, newVersion, subject, useSysData)
+func (c *Upgrader) SaveActiveVersion(version string) {
+	c.conf.ActiveVersion = version
+	err := c.conf.Save()
+	if err != nil {
+		logger.Infof("failed update version to %q: %v", version, err)
+	}
+}
+
+func (c *Upgrader) Commit(newVersion, subject string, useSysData bool,
+	evHandler func(op, state int32, desc string)) (err error) {
+	if len(newVersion) == 0 {
+		newVersion, err = c.GenerateBranchName()
 		if err != nil {
-			return err
+			goto failure
 		}
 	}
-	return nil
+	logger.Info("the version number of this submission is:", newVersion)
+	for _, v := range c.conf.RepoList {
+		err = c.repoCommit(v, newVersion, subject, useSysData)
+		if err != nil {
+			goto failure
+		}
+	}
+	c.SaveActiveVersion(newVersion)
+	if c.IsAutoClean() {
+		err = c.RepoAutoCleanup()
+		if err != nil {
+			logger.Error("failed auto cleanup repo, err:", err)
+		}
+	}
+	err = c.UpdateGrub()
+	if err != nil {
+		goto failure
+	}
+	if evHandler != nil {
+		evHandler(int32(_OP_TY_COMMIT), int32(_STATE_TY_SUCCESS),
+			fmt.Sprintf("%s: %s", _OP_TY_COMMIT.String(), _STATE_TY_SUCCESS.String()))
+		return nil
+	}
+failure:
+	if evHandler != nil {
+		evHandler(int32(_OP_TY_COMMIT), int32(_STATE_TY_FAILED),
+			fmt.Sprintf("%s: %s: %s", _OP_TY_COMMIT.String(), _STATE_TY_FAILED.String(), err))
+	}
+	return err
 }
 
 func (c *Upgrader) IsExists() bool {
@@ -94,10 +175,10 @@ func (c *Upgrader) UpdateGrub() error {
 	return err
 }
 
-func (c *Upgrader) Snapshot(version, selfmountpath string, bootEnabled bool) ([]mountpoint.MountPointList, error) {
+func (c *Upgrader) Snapshot(version string, bootEnabled bool) ([]mountpoint.MountPointList, error) {
 	var mountedPointRepoList []mountpoint.MountPointList
 	for _, v := range c.conf.RepoList {
-		mountedPointList, err := c.repoSnapshot(v, version, selfmountpath, bootEnabled)
+		mountedPointList, err := c.repoSnapshot(v, version, bootEnabled)
 		if err != nil {
 			return mountedPointRepoList, err
 		}
@@ -106,36 +187,48 @@ func (c *Upgrader) Snapshot(version, selfmountpath string, bootEnabled bool) ([]
 	return mountedPointRepoList, nil
 }
 
-func (c *Upgrader) Rollback(version, selfmountpath string, conf *config.Config) error {
-	mountedPointRepoList, err := c.Snapshot(version, selfmountpath, false)
+func (c *Upgrader) Rollback(version string,
+	evHandler func(op, state int32, desc string)) (err error) {
+	var mountedPointRepoList []mountpoint.MountPointList
+	if len(version) == 0 {
+		err = errors.New("must special version")
+		goto failure
+	}
+	mountedPointRepoList, err = c.Snapshot(version, false)
 	if err != nil {
-		return err
+		goto failure
 	}
 	for _, v := range c.conf.RepoList {
 		// TODO(jouyouyun): fallback when failure
 		err = c.repoRollback(v, version)
 		if err != nil {
-			return err
+			goto failure
 		}
 	}
+	c.SaveActiveVersion(version)
 	//restore mount points under initramfs and save action version
 	if len(c.rootMP) != 1 {
-		conf.ActiveVersion = version
-		err = conf.Save()
-		if err != nil {
-			logger.Infof("update version to %q: %v", version, err)
-		}
 		for _, mountPointList := range mountedPointRepoList {
 			for _, v := range mountPointList {
 				err = util.ExecCommand("umount", []string{v.Dest})
 				logger.Info("restore system mount, will umount:", v.Dest)
 				if err != nil {
-					logger.Warning("failed umount, err: ", err)
+					logger.Warning("failed umount, err:", err)
 				}
 			}
 		}
 	}
+	if evHandler != nil {
+		evHandler(int32(_OP_TY_ROLLBACK), int32(_STATE_TY_SUCCESS),
+			fmt.Sprintf("%s: %s", _OP_TY_ROLLBACK.String(), _STATE_TY_SUCCESS.String()))
+	}
 	return nil
+failure:
+	if evHandler != nil {
+		evHandler(int32(_OP_TY_ROLLBACK), int32(_STATE_TY_FAILED),
+			fmt.Sprintf("%s: %s: %s", _OP_TY_ROLLBACK.String(), _STATE_TY_FAILED.String(), err))
+	}
+	return err
 }
 
 func (c *Upgrader) repoCommit(repoConf *config.RepoConfig, newVersion, subject string,
@@ -163,7 +256,7 @@ func (c *Upgrader) repoCommit(repoConf *config.RepoConfig, newVersion, subject s
 	return nil
 }
 
-func (c *Upgrader) repoSnapshot(repoConf *config.RepoConfig, version, selfmountpath string,
+func (c *Upgrader) repoSnapshot(repoConf *config.RepoConfig, version string,
 	bootEnabled bool) (mountpoint.MountPointList, error) {
 	var mountedPointList mountpoint.MountPointList
 	handler := c.repoSet[repoConf.Repo]
@@ -182,7 +275,7 @@ func (c *Upgrader) repoSnapshot(repoConf *config.RepoConfig, version, selfmountp
 				return mountedPointList, err
 			}
 		}
-		mountinfos, err := mountinfo.Load(selfmountpath)
+		mountinfos, err := mountinfo.Load(SelfMountPath)
 		logger.Infof("to update the local mount, you need to reload the mount information")
 		if err != nil {
 			return nil, err
@@ -464,13 +557,13 @@ func (c *Upgrader) updataLoaclMount(snapDir string) (mountpoint.MountPointList, 
 	return mountedPointList, nil
 }
 
-func (c *Upgrader) RepoAutoCleanup(conf *config.Config) error {
+func (c *Upgrader) RepoAutoCleanup() error {
 	handler, err := repo.NewRepo(repo.REPO_TY_OSTREE,
-		filepath.Join(c.rootMP, conf.RepoList[0].Repo))
+		filepath.Join(c.rootMP, c.conf.RepoList[0].Repo))
 	if err != nil {
 		return err
 	}
-	maxVersion := int(conf.MaxVersionRetention)
+	maxVersion := int(c.conf.MaxVersionRetention)
 	list, err := handler.List()
 	if err != nil {
 		return err
@@ -488,7 +581,7 @@ func (c *Upgrader) RepoAutoCleanup(conf *config.Config) error {
 		if i < maxVersion-1 {
 			continue
 		}
-		err = c.Delete(conf, v)
+		err = c.Delete(v)
 		if err != nil {
 			logger.Warning(err)
 			break
@@ -497,15 +590,15 @@ func (c *Upgrader) RepoAutoCleanup(conf *config.Config) error {
 	return nil
 }
 
-func (c *Upgrader) Delete(conf *config.Config, version string) error {
-	if len(conf.RepoList) == 0 || len(version) == 0 {
+func (c *Upgrader) Delete(version string) error {
+	if len(c.conf.RepoList) == 0 || len(version) == 0 {
 		return errors.New("branch does not exist")
 	}
-	if version == conf.ActiveVersion {
+	if version == c.conf.ActiveVersion {
 		return errors.New("the current activated version does not allow deletion")
 	}
 	handler, err := repo.NewRepo(repo.REPO_TY_OSTREE,
-		filepath.Join(c.rootMP, conf.RepoList[0].Repo))
+		filepath.Join(c.rootMP, c.conf.RepoList[0].Repo))
 	if err != nil {
 		return err
 	}
@@ -513,11 +606,51 @@ func (c *Upgrader) Delete(conf *config.Config, version string) error {
 	if err != nil {
 		return err
 	}
-	snapshotDir := filepath.Join(c.rootMP, conf.RepoList[0].SnapshotDir, version)
+	snapshotDir := filepath.Join(c.rootMP, c.conf.RepoList[0].SnapshotDir, version)
 	logger.Debug("delete tmp snapshot directory:", snapshotDir)
 	_ = os.RemoveAll(snapshotDir)
 	bootDir := filepath.Join(c.rootMP, "boot/snapshot", version)
 	logger.Debug("delete kernel snapshot directory:", bootDir)
 	_ = os.RemoveAll(bootDir)
 	return nil
+}
+
+func (c *Upgrader) IsAutoClean() bool {
+	if len(c.conf.RepoList) == 0 {
+		return true
+	}
+	return c.conf.AutoCleanup
+}
+
+func (c *Upgrader) GenerateBranchName() (string, error) {
+	if len(c.conf.RepoList) != 0 {
+		handler, err := repo.NewRepo(repo.REPO_TY_OSTREE,
+			c.conf.RepoList[0].Repo)
+		if err != nil {
+			return "", err
+		}
+		name, err := handler.Last()
+		if err != nil {
+			return "", err
+		}
+		return branch.Increment(name)
+	}
+	return branch.GenInitName(c.conf.Distribution), nil
+}
+
+func (c *Upgrader) ListVersion() ([]string, error) {
+	if len(c.conf.RepoList) == 0 {
+		return nil, nil
+	}
+
+	handler, err := repo.NewRepo(repo.REPO_TY_OSTREE,
+		filepath.Join(c.rootMP, c.conf.RepoList[0].Repo))
+	if err != nil {
+		return nil, err
+	}
+	return handler.List()
+}
+
+func (c *Upgrader) DistributionName() string {
+	return c.conf.Distribution
 }

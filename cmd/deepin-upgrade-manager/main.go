@@ -3,15 +3,15 @@ package main
 import (
 	"deepin-upgrade-manager/pkg/config"
 	"deepin-upgrade-manager/pkg/logger"
-	"deepin-upgrade-manager/pkg/module/repo"
 	"deepin-upgrade-manager/pkg/module/repo/branch"
 	"deepin-upgrade-manager/pkg/module/single"
+	"deepin-upgrade-manager/pkg/module/util"
 	"deepin-upgrade-manager/pkg/upgrader"
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
+	"time"
 )
 
 const (
@@ -28,6 +28,7 @@ var (
 	_action  = flag.String("action", "list", "the available actions: init, commit, rollback, list")
 	_version = flag.String("version", "", "the version which rollback")
 	_rootDir = flag.String("root", "/", "the rootfs mount point")
+	_daemon  = flag.Bool("daemon", false, "start dbus service")
 )
 
 func main() {
@@ -38,7 +39,6 @@ func main() {
 		fmt.Println("load config wrong:", err)
 		os.Exit(-1)
 	}
-
 	err = conf.Prepare()
 	if err != nil {
 		fmt.Println("config prepare wrong:", err)
@@ -49,147 +49,101 @@ func main() {
 	} else {
 		logger.NewLogger("deepin-upgrade-manager", true)
 	}
-	selfMountPath := "/proc/self/mounts"
-	operator, err := upgrader.NewUpgrader(conf,
-		*_rootDir, selfMountPath)
-	if err != nil {
-		logger.Error("new repo operator:", err)
+	if os.Geteuid() != 0 {
+		logger.Info("Must run with privileged user")
 		os.Exit(-1)
 	}
+	err = util.FixEnvPath()
+	if err != nil {
+		logger.Warning("Failed to setenv:", err)
+	}
+	m, err := NewManager(conf, *_daemon)
+	if err != nil {
+		logger.Fatal("Failed to setup dbus:", err)
+		os.Exit(-1)
+	}
+	if *_daemon {
+		logger.Info("start running dbus service")
+		err = m.setupDBus()
+		if err != nil {
+			logger.Fatal("Failed to setup dbus:", err)
+			os.Exit(-1)
+		}
+		m.SetAutoQuitHandler(30 * time.Second)
+		m.Wait()
+		return
+	}
+	handleAction(m.upgrade, conf)
+}
+
+func handleAction(m *upgrader.Upgrader, c *config.Config) {
+	var err error
 	switch *_action {
 	case _ACTION_INIT:
 		logger.Info("start initialize a new empty repo")
-		if operator.IsExists() {
-			logger.Error("failed to initialize because repository exists")
-			os.Exit(-1)
-		}
-		err = operator.Init()
+		err := m.Init()
 		if err != nil {
 			logger.Error("init repo failed:", err)
 			os.Exit(-1)
 		}
-		*_version = branch.GenInitName(conf.Distribution)
+		*_version = branch.GenInitName(c.Distribution)
 		fallthrough
 	case _ACTION_COMMIT:
 		if !single.SetSingleInstance() {
 			logger.Error("process already exists")
 			os.Exit(-1)
 		}
-		if len(*_version) == 0 {
-			*_version, err = generateBranchName(conf)
-			if err != nil {
-				logger.Error("generate version failed:", err)
-				os.Exit(-1)
-			}
-		}
-		logger.Info("the version number of this submission is:", *_version)
-		err = operator.Commit(*_version, fmt.Sprintf("Release %s", *_version), true)
+		err = m.Commit(*_version, fmt.Sprintf("Release %s", *_version), true, nil)
 		if err != nil {
 			logger.Error("commit failed:", err)
 			os.Exit(-1)
 		}
-		if isAutoClean(conf) {
-			err = operator.RepoAutoCleanup(conf)
-			if err != nil {
-				logger.Error("failed auto cleanup repo, err:", err)
-			}
-		}
-
-		err = operator.UpdateGrub()
-		if err != nil {
-			logger.Error("failed update grub, err:", err)
-			os.Exit(-1)
-		}
+		single.Remove()
 		logger.Info("ending commit a new version")
 	case _ACTION_ROLLBACK:
+		logger.Info("start rollback a old version:", *_version)
 		if !single.SetSingleInstance() {
 			logger.Error("process already exists")
 			os.Exit(-1)
 		}
-		logger.Info("start rollback a old version:", *_version)
-		if len(*_version) == 0 {
-			logger.Error("Must special version")
-			os.Exit(-1)
-		}
-		// NOTICE(jouyouyun): must ensure the partition which in fstab had mounted.
-		err = operator.Rollback(*_version, selfMountPath, conf)
+		err = m.Rollback(*_version, nil)
 		if err != nil {
 			logger.Errorf("rollback %q: %v", *_version, err)
 			os.Exit(-1)
 		}
+		single.Remove()
 		logger.Info("end rollback a old version:", *_version)
 	case _ACTION_SNAPSHOT:
 		if len(*_version) == 0 {
 			logger.Error("Must special version")
 			os.Exit(-1)
 		}
-		_, err = operator.Snapshot(*_version, selfMountPath, true)
+		_, err = m.Snapshot(*_version, true)
 		if err != nil {
 			logger.Errorf("snapshot %q: %v", *_version, err)
 			os.Exit(-1)
 		}
 		return
 	case _ACTION_LIST:
-		verList, err := listVersion(conf)
+		verList, err := m.ListVersion()
 		if err != nil {
 			logger.Error("list version:", err)
 			os.Exit(-1)
 		}
-		fmt.Printf("ActiveVersion:%s\n", conf.ActiveVersion)
+		fmt.Printf("ActiveVersion:%s\n", c.ActiveVersion)
 		fmt.Printf("AvailVersionList:%s\n", strings.Join(verList, " "))
 		return
 	case _ACTION_DELETE:
-		err := operator.Delete(conf, *_version)
+		err := m.Delete(*_version)
 		if err != nil {
 			logger.Error("failed delete version:", err)
 			os.Exit(-1)
 		}
-		err = operator.UpdateGrub()
+		err = m.UpdateGrub()
 		if err != nil {
 			logger.Error("failed update grub, err:", err)
 			os.Exit(-1)
 		}
 		return
 	}
-	conf.ActiveVersion = *_version
-	err = conf.Save()
-	if err != nil {
-		logger.Infof("update version to %q: %v", *_version, err)
-	}
-}
-
-func generateBranchName(conf *config.Config) (string, error) {
-	if len(conf.RepoList) != 0 {
-		handler, err := repo.NewRepo(repo.REPO_TY_OSTREE,
-			conf.RepoList[0].Repo)
-		if err != nil {
-			return "", err
-		}
-		name, err := handler.Last()
-		if err != nil {
-			return "", err
-		}
-		return branch.Increment(name)
-	}
-	return branch.GenInitName(conf.Distribution), nil
-}
-
-func listVersion(conf *config.Config) ([]string, error) {
-	if len(conf.RepoList) == 0 {
-		return nil, nil
-	}
-
-	handler, err := repo.NewRepo(repo.REPO_TY_OSTREE,
-		filepath.Join(*_rootDir, conf.RepoList[0].Repo))
-	if err != nil {
-		return nil, err
-	}
-	return handler.List()
-}
-
-func isAutoClean(conf *config.Config) bool {
-	if len(conf.RepoList) == 0 {
-		return true
-	}
-	return conf.AutoCleanup
 }
