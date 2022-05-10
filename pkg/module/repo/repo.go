@@ -18,6 +18,7 @@ type Repository interface {
 	Cat(branchName, filepath, dstFile string) error
 	Previous(targetName string) (string, error)
 	Delete(branchName string) error
+	Subject(branchName string) (string, error)
 }
 
 const (

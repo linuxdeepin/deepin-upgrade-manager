@@ -218,6 +218,18 @@ func (repo *OSTree) Delete(branchName string) error {
 	return nil
 }
 
+func (repo *OSTree) Subject(branchName string) (string, error) {
+	out, err := doAction([]string{"log", "--repo=" + repo.repoDir, branchName})
+	if err != nil {
+		return "", err
+	}
+	lines := strings.Split(string(out), "\n\n")
+	if len(lines) < 2 {
+		return "", fmt.Errorf("commit does not exist")
+	}
+	return lines[1], nil
+}
+
 func doAction(args []string) ([]byte, error) {
 	out, err := exec.Command("ostree", args...).CombinedOutput()
 	if err != nil {

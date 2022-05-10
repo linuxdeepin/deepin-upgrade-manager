@@ -21,6 +21,7 @@ const (
 	_ACTION_SNAPSHOT = "snapshot"
 	_ACTION_LIST     = "list"
 	_ACTION_DELETE   = "delete"
+	_ACTION_SUBJECT  = "subject"
 )
 
 var (
@@ -29,6 +30,7 @@ var (
 	_version = flag.String("version", "", "the version which rollback")
 	_rootDir = flag.String("root", "/", "the rootfs mount point")
 	_daemon  = flag.Bool("daemon", false, "start dbus service")
+	_subject = flag.String("subject", "", "the commit subject")
 )
 
 func main() {
@@ -93,7 +95,7 @@ func handleAction(m *upgrader.Upgrader, c *config.Config) {
 			logger.Error("process already exists")
 			os.Exit(-1)
 		}
-		err = m.Commit(*_version, fmt.Sprintf("Release %s", *_version), true, nil)
+		err = m.Commit(*_version, *_subject, true, nil)
 		if err != nil {
 			logger.Error("commit failed:", err)
 			os.Exit(-1)
@@ -115,7 +117,7 @@ func handleAction(m *upgrader.Upgrader, c *config.Config) {
 		logger.Info("end rollback a old version:", *_version)
 	case _ACTION_SNAPSHOT:
 		if len(*_version) == 0 {
-			logger.Error("Must special version")
+			logger.Error("must special version")
 			os.Exit(-1)
 		}
 		_, err = m.Snapshot(*_version, true)
@@ -123,7 +125,6 @@ func handleAction(m *upgrader.Upgrader, c *config.Config) {
 			logger.Errorf("snapshot %q: %v", *_version, err)
 			os.Exit(-1)
 		}
-		return
 	case _ACTION_LIST:
 		verList, err := m.ListVersion()
 		if err != nil {
@@ -132,7 +133,6 @@ func handleAction(m *upgrader.Upgrader, c *config.Config) {
 		}
 		fmt.Printf("ActiveVersion:%s\n", c.ActiveVersion)
 		fmt.Printf("AvailVersionList:%s\n", strings.Join(verList, " "))
-		return
 	case _ACTION_DELETE:
 		err := m.Delete(*_version)
 		if err != nil {
@@ -144,6 +144,16 @@ func handleAction(m *upgrader.Upgrader, c *config.Config) {
 			logger.Error("failed update grub, err:", err)
 			os.Exit(-1)
 		}
-		return
+	case _ACTION_SUBJECT:
+		if len(*_version) == 0 {
+			logger.Error("must special version")
+			os.Exit(-1)
+		}
+		sub, err := m.Subject(*_version)
+		if err != nil {
+			logger.Error(err)
+			os.Exit(-1)
+		}
+		fmt.Println(sub)
 	}
 }

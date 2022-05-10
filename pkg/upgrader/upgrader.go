@@ -118,6 +118,9 @@ func (c *Upgrader) Commit(newVersion, subject string, useSysData bool,
 			goto failure
 		}
 	}
+	if len(subject) == 0 {
+		subject = fmt.Sprintf("Release %s", newVersion)
+	}
 	logger.Info("the version number of this submission is:", newVersion)
 	for _, v := range c.conf.RepoList {
 		err = c.repoCommit(v, newVersion, subject, useSysData)
@@ -662,4 +665,17 @@ func (c *Upgrader) ListVersion() ([]string, error) {
 
 func (c *Upgrader) DistributionName() string {
 	return c.conf.Distribution
+}
+
+func (c *Upgrader) Subject(version string) (string, error) {
+	var sub string
+	handler, err := repo.NewRepo(repo.REPO_TY_OSTREE,
+		filepath.Join(c.rootMP, c.conf.RepoList[0].Repo))
+	if err != nil {
+		return sub, err
+	}
+	if !handler.Exist(version) {
+		return sub, errors.New("failed get subject, the current version does not exist version")
+	}
+	return handler.Subject(version)
 }
