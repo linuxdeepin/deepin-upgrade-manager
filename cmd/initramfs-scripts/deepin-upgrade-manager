@@ -11,7 +11,7 @@ prereqs()
 }
 
 case "${1}" in
-    prepare)
+    prereqs)
         prereqs
         exit 0
         ;;
