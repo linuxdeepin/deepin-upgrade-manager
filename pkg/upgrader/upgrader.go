@@ -235,15 +235,15 @@ func (c *Upgrader) repoCommit(repoConf *config.RepoConfig, newVersion, subject s
 	useSysData bool) error {
 	handler := c.repoSet[repoConf.Repo]
 	dataDir := filepath.Join(c.rootMP, c.conf.CacheDir, c.conf.Distribution)
+	defer func() {
+		_ = os.RemoveAll(filepath.Join(c.rootMP, c.conf.CacheDir))
+	}()
 	if useSysData {
 		isEnough, err := c.isDirSpaceEnough(c.rootMP, repoConf.SubscribeList)
-		if err != nil {
+		if err != nil || !isEnough {
 			return err
 		}
-		if !isEnough {
-			return err
-		}
-		err = c.copyRepoData(c.rootMP, dataDir, repoConf.SubscribeList)
+		err = c.copyRepoData(c.rootMP, dataDir, repoConf.SubscribeList, repoConf.FilterList)
 		if err != nil {
 			return err
 		}
@@ -252,7 +252,6 @@ func (c *Upgrader) repoCommit(repoConf *config.RepoConfig, newVersion, subject s
 	if err != nil {
 		return err
 	}
-	_ = os.RemoveAll(filepath.Join(c.rootMP, c.conf.CacheDir))
 	return nil
 }
 
@@ -440,14 +439,24 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 }
 
 func (c *Upgrader) copyRepoData(rootDir, dataDir string,
-	subscribeList []string) error {
+	subscribeList []string, filterList []string) error {
+	//need filter '/usr/.v23'
+	repoCacheDir := filepath.Join(c.rootMP, c.conf.CacheDir)
+	filterList = append(filterList, repoCacheDir)
+
 	for _, dir := range subscribeList {
+		var currentFilterList []string
+		for _, v := range filterList {
+			if strings.HasPrefix(v, dir) {
+				currentFilterList = append(currentFilterList, v)
+			}
+		}
 		srcDir := filepath.Join(rootDir, dir)
 		if !util.IsExists(srcDir) {
 			logger.Info("[copyRepoData] src dir empty:", srcDir)
 			continue
 		}
-		err := util.CopyDir(srcDir, filepath.Join(dataDir, dir), dataDir, true)
+		err := util.CopyDir(srcDir, filepath.Join(dataDir, dir), currentFilterList, true)
 		if err != nil {
 			return err
 		}

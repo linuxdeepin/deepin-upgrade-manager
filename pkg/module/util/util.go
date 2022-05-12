@@ -467,7 +467,13 @@ func CompareDirAndCopy(src, dst, cmp string, filter []string) error {
 	return nil
 }
 
-func CopyDir(src, dst, dataDir string, enableHardlink bool) error {
+func CopyDir(src, dst string, filterList []string, enableHardlink bool) error {
+
+	if IsExistsPath(filterList, src) {
+		logger.Debugf("ignore data dir:%s", src)
+		return nil
+	}
+
 	sfi, err := os.Stat(src)
 	if err != nil {
 		return err
@@ -481,10 +487,6 @@ func CopyDir(src, dst, dataDir string, enableHardlink bool) error {
 	fiList, err := ioutil.ReadDir(src)
 	if err != nil {
 		return err
-	}
-	if strings.HasPrefix(src, dataDir) {
-		logger.Debugf("ignore data dir:%s", src)
-		return nil
 	}
 
 	for _, fi := range fiList {
@@ -503,7 +505,7 @@ func CopyDir(src, dst, dataDir string, enableHardlink bool) error {
 			logger.Debug("[CopyDir] will remove(char):", dstSub)
 			err = os.RemoveAll(dstSub)
 		case fiStat.Mode&syscall.S_IFDIR == syscall.S_IFDIR:
-			err = CopyDir(srcSub, dstSub, dataDir, enableHardlink)
+			err = CopyDir(srcSub, dstSub, filterList, enableHardlink)
 		case fiStat.Mode&syscall.S_IFREG == syscall.S_IFREG:
 			err = CopyFile2(srcSub, dstSub, sfi, enableHardlink)
 		default:

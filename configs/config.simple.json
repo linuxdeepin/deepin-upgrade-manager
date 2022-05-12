@@ -22,6 +22,8 @@
         "/var/lib/initramfs-tools",
         "/var/lib/systemd/deb-systemd-helper-enabled",
         "/var/lib/selinux"
+      ],
+      "filter_list": [
       ]
     }
   ]

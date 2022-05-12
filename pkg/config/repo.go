@@ -13,6 +13,7 @@ type RepoConfig struct {
 	StageDir    string `json:"stage_dir"`
 
 	SubscribeList []string `json:"subscribe_list"`
+	FilterList    []string `json:"filter_list"`
 }
 type RepoListConfig []*RepoConfig
 
