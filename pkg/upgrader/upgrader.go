@@ -356,12 +356,12 @@ func (c *Upgrader) handleRepoRollbak(realDir, snapDir, version string,
 	logger.Debugf("start rolling back, realDir:%s, snapDir:%s, version:%s, list len:%d",
 		realDir, snapDir, version, len(list))
 	if len(list) > 0 {
-		rootPartition, err := dirinfo.GetDirPartition(realDir)
+		rootPartition, err := dirinfo.GetDirPartition(filepath.Join(c.rootMP, realDir))
 		if err != nil {
 			return err
 		}
 		for _, l := range list {
-			if l.MountPoint == realDir {
+			if l.MountPoint == filepath.Join(c.rootMP, realDir) {
 				continue
 			}
 			if rootPartition != l.Partition {
@@ -422,7 +422,7 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 	var bootDir string
 	for _, dir := range realSubscribeList {
 		logger.Debug("start replacing the dir:", dir)
-		if strings.HasPrefix(dir, filepath.Join(c.rootMP, "/boot")) {
+		if strings.HasSuffix(filepath.Join(c.rootMP, "/boot"), dir) {
 			logger.Debugf("the %s needs to be replaced last", dir)
 			bootDir = dir
 			continue
