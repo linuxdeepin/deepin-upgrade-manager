@@ -349,9 +349,11 @@ func (c *Upgrader) enableSnapshotBoot(snapDir, version string) error {
 // @param     HandlerDir   		function pointer    "file handler function pointer"
 func (c *Upgrader) handleRepoRollbak(realDir, snapDir, version string,
 	rollbackDirList *[]string, HandlerDir func(src, dst, version, rootDir string, filter []string) (string, error)) error {
-	var filterDir []string
+	var filterDirs []string
 	var rollbackDir string
 	var err error
+	// need trim root dir
+	realDir = util.TrimRootdir(c.rootMP, realDir)
 	list := c.mountInfos.Query(filepath.Join(c.rootMP, realDir))
 	logger.Debugf("start rolling back, realDir:%s, snapDir:%s, version:%s, list len:%d",
 		realDir, snapDir, version, len(list))
@@ -365,12 +367,13 @@ func (c *Upgrader) handleRepoRollbak(realDir, snapDir, version string,
 				continue
 			}
 			if rootPartition != l.Partition {
-				filterDir = append(filterDir, l.MountPoint)
+				filterDirs = append(filterDirs, l.MountPoint)
 			}
 		}
-		logger.Debugf("the filter directory path is %s", filterDir)
+		logger.Debugf("the filter directory path is %s", filterDirs)
 	}
-	rollbackDir, err = HandlerDir(filepath.Join(snapDir+realDir), realDir, version, c.rootMP, filterDir)
+
+	rollbackDir, err = HandlerDir(filepath.Join(snapDir+realDir), realDir, version, c.rootMP, filterDirs)
 	if err != nil {
 		logger.Warningf("fail rollback dir:%s,err:%v", realDir, err)
 		return err
@@ -379,7 +382,7 @@ func (c *Upgrader) handleRepoRollbak(realDir, snapDir, version string,
 		logger.Debug("rollbackDir:", rollbackDir)
 	}
 
-	for _, l := range filterDir {
+	for _, l := range filterDirs {
 		err = c.handleRepoRollbak(l, snapDir, version, rollbackDirList, HandlerDir)
 		if err != nil {
 			return err

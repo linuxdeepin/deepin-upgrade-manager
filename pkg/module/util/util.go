@@ -732,3 +732,15 @@ func HandlerDirRecover(src, dst, version, rootdir string, filter []string) (stri
 	logger.Debugf("start replace the dir, src:%s, dir:%s, dst:%s, version:%s", src, dir, dst, version)
 	return handlerDirReplace(dst, dir, newDir, filter)
 }
+
+func TrimRootdir(rootDir, src string) string {
+	if len(rootDir) != 1 && strings.HasPrefix(src, rootDir) {
+		if strings.HasSuffix(rootDir, "/") {
+			rootDir = strings.TrimRight(rootDir, "/")
+			println(rootDir)
+		}
+		return strings.TrimPrefix(src, rootDir)
+	} else {
+		return src
+	}
+}
