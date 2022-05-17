@@ -24,6 +24,11 @@ const (
 	_ACTION_SUBJECT  = "subject"
 )
 
+const (
+	FAILED_PROCESS_EXISTS = -255
+	FAILED_VERSION_EXISTS = -256
+)
+
 var (
 	_config  = flag.String("config", "/etc/deepin-upgrade-manager/config.json", "the configuration file path")
 	_action  = flag.String("action", "list", "the available actions: init, commit, rollback, list")
@@ -80,25 +85,26 @@ func main() {
 
 func handleAction(m *upgrader.Upgrader, c *config.Config) {
 	var err error
+	var exitCode int
 	switch *_action {
 	case _ACTION_INIT:
 		logger.Info("start initialize a new empty repo")
-		err := m.Init()
+		exitCode, err = m.Init()
 		if err != nil {
 			logger.Error("init repo failed:", err)
-			os.Exit(-1)
+			os.Exit(exitCode)
 		}
 		*_version = branch.GenInitName(c.Distribution)
 		fallthrough
 	case _ACTION_COMMIT:
 		if !single.SetSingleInstance() {
 			logger.Error("process already exists")
-			os.Exit(-1)
+			os.Exit(FAILED_PROCESS_EXISTS)
 		}
-		err = m.Commit(*_version, *_subject, true, nil)
+		exitCode, err = m.Commit(*_version, *_subject, true, nil)
 		if err != nil {
 			logger.Error("commit failed:", err)
-			os.Exit(-1)
+			os.Exit(exitCode)
 		}
 		single.Remove()
 		logger.Info("ending commit a new version")
@@ -106,30 +112,34 @@ func handleAction(m *upgrader.Upgrader, c *config.Config) {
 		logger.Info("start rollback a old version:", *_version)
 		if !single.SetSingleInstance() {
 			logger.Error("process already exists")
-			os.Exit(-1)
+			os.Exit(FAILED_PROCESS_EXISTS)
 		}
-		err = m.Rollback(*_version, nil)
+		if len(*_version) == 0 {
+			logger.Error("must special version")
+			os.Exit(FAILED_VERSION_EXISTS)
+		}
+		exitCode, err = m.Rollback(*_version, nil)
 		if err != nil {
 			logger.Errorf("rollback %q: %v", *_version, err)
-			os.Exit(-1)
+			os.Exit(exitCode)
 		}
 		single.Remove()
 		logger.Info("end rollback a old version:", *_version)
 	case _ACTION_SNAPSHOT:
 		if len(*_version) == 0 {
 			logger.Error("must special version")
-			os.Exit(-1)
+			os.Exit(FAILED_VERSION_EXISTS)
 		}
-		_, err = m.Snapshot(*_version, true)
+		_, exCode, err := m.Snapshot(*_version, true)
 		if err != nil {
 			logger.Errorf("snapshot %q: %v", *_version, err)
-			os.Exit(-1)
+			os.Exit(int(exCode))
 		}
 	case _ACTION_LIST:
-		verList, err := m.ListVersion()
+		verList, exitCode, err := m.ListVersion()
 		if err != nil {
 			logger.Error("list version:", err)
-			os.Exit(-1)
+			os.Exit(exitCode)
 		}
 		fmt.Printf("ActiveVersion:%s\n", c.ActiveVersion)
 		fmt.Printf("AvailVersionList:%s\n", strings.Join(verList, " "))
@@ -137,22 +147,22 @@ func handleAction(m *upgrader.Upgrader, c *config.Config) {
 		err := m.Delete(*_version)
 		if err != nil {
 			logger.Error("failed delete version:", err)
-			os.Exit(-1)
+			os.Exit(FAILED_VERSION_EXISTS)
 		}
-		err = m.UpdateGrub()
+		exCode, err := m.UpdateGrub()
 		if err != nil {
 			logger.Error("failed update grub, err:", err)
-			os.Exit(-1)
+			os.Exit(int(exCode))
 		}
 	case _ACTION_SUBJECT:
 		if len(*_version) == 0 {
 			logger.Error("must special version")
-			os.Exit(-1)
+			os.Exit(FAILED_VERSION_EXISTS)
 		}
 		sub, err := m.Subject(*_version)
 		if err != nil {
 			logger.Error(err)
-			os.Exit(-1)
+			os.Exit(FAILED_VERSION_EXISTS)
 		}
 		fmt.Println(sub)
 	}

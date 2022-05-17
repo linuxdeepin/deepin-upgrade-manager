@@ -59,7 +59,7 @@ func (m *Manager) emitStateChanged(op, state int32, desc string) {
 }
 
 func (m *Manager) List() ([]string, *dbus.Error) {
-	vers, err := m.upgrade.ListVersion()
+	vers, _, err := m.upgrade.ListVersion()
 	if err != nil {
 		logger.Error("Failed to list version:", err)
 		return nil, dbus.MakeFailedError(err)
@@ -82,9 +82,9 @@ func (m *Manager) Rollback(version string) *dbus.Error {
 			m.mu.Unlock()
 			single.Remove()
 		}()
-		err := m.upgrade.Rollback(version, m.emitStateChanged)
+		exitCode, err := m.upgrade.Rollback(version, m.emitStateChanged)
 		if err != nil {
-			logger.Error("Failed to rollback upgrade:", err)
+			logger.Errorf("failed to rollback upgrade, err: %v, exit code: %d", err, exitCode)
 			return
 		}
 	}()
@@ -111,9 +111,9 @@ func (m *Manager) Commit(subject string) *dbus.Error {
 			m.upgrade.Init()
 			version = branch.GenInitName(m.upgrade.DistributionName())
 		}
-		err := m.upgrade.Commit(version, subject, true, m.emitStateChanged)
+		exitCode, err := m.upgrade.Commit(version, subject, true, m.emitStateChanged)
 		if err != nil {
-			logger.Error("commit failed:", err)
+			logger.Errorf("failed to commit version, err: %v, exit code: %d:", err, exitCode)
 			return
 		}
 		logger.Info("ending commit a new version")

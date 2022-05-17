@@ -33,16 +33,34 @@ const (
 )
 
 const (
-	_STATE_TY_SUCCESS stateType = iota + 1
-	_STATE_TY_FAILED
+	_STATE_TY_SUCCESS stateType = -iota
+	_STATE_TY_FAILED_NO_REPO
+	_STATE_TY_FAILED_NO_SPACE
+	_STATE_TY_FAILED_UPDATE_GRUB
+	_STATE_TY_FAILED_HANDLING_MOUNTS
+	_STATE_TY_FAILED_OSTREE_INIT
+	_STATE_TY_FAILED_OSTREE_COMMIT
+	_STATE_TY_FAILED_OSTREE_ROLLBACK
 )
 
 func (state stateType) String() string {
 	switch state {
 	case _STATE_TY_SUCCESS:
 		return "success"
-	case _STATE_TY_FAILED:
-		return "failed"
+	case _STATE_TY_FAILED_NO_SPACE:
+		return "not enough space"
+	case _STATE_TY_FAILED_NO_REPO:
+		return "repo does not exist"
+	case _STATE_TY_FAILED_HANDLING_MOUNTS:
+		return "failed handling mounts"
+	case _STATE_TY_FAILED_UPDATE_GRUB:
+		return "failed update grub"
+	case _STATE_TY_FAILED_OSTREE_COMMIT:
+		return "failed ostree commit"
+	case _STATE_TY_FAILED_OSTREE_ROLLBACK:
+		return "failed ostree rollback"
+	case _STATE_TY_FAILED_OSTREE_INIT:
+		return "failed ostree init"
 	}
 	return "unknown"
 }
@@ -89,17 +107,20 @@ func NewUpgrader(conf *config.Config,
 	return &info, nil
 }
 
-func (c *Upgrader) Init() error {
+func (c *Upgrader) Init() (int, error) {
+	exitCode := _STATE_TY_SUCCESS
 	if c.IsExists() {
-		return errors.New("failed to initialize because repository exists")
+		exitCode = _STATE_TY_FAILED_OSTREE_INIT
+		return int(exitCode), errors.New("failed to initialize because repository exists")
 	}
 	for _, handler := range c.repoSet {
 		err := handler.Init()
 		if err != nil {
-			return err
+			exitCode = _STATE_TY_FAILED_OSTREE_INIT
+			return int(exitCode), err
 		}
 	}
-	return nil
+	return int(exitCode), nil
 }
 
 func (c *Upgrader) SaveActiveVersion(version string) {
@@ -111,10 +132,12 @@ func (c *Upgrader) SaveActiveVersion(version string) {
 }
 
 func (c *Upgrader) Commit(newVersion, subject string, useSysData bool,
-	evHandler func(op, state int32, desc string)) (err error) {
+	evHandler func(op, state int32, desc string)) (excode int, err error) {
+	exitCode := _STATE_TY_SUCCESS
 	if len(newVersion) == 0 {
 		newVersion, err = c.GenerateBranchName()
 		if err != nil {
+			exitCode = _STATE_TY_FAILED_NO_REPO
 			goto failure
 		}
 	}
@@ -125,6 +148,7 @@ func (c *Upgrader) Commit(newVersion, subject string, useSysData bool,
 	for _, v := range c.conf.RepoList {
 		err = c.repoCommit(v, newVersion, subject, useSysData)
 		if err != nil {
+			exitCode = _STATE_TY_FAILED_OSTREE_COMMIT
 			goto failure
 		}
 	}
@@ -135,21 +159,22 @@ func (c *Upgrader) Commit(newVersion, subject string, useSysData bool,
 			logger.Error("failed auto cleanup repo, err:", err)
 		}
 	}
-	err = c.UpdateGrub()
+	exitCode, err = c.UpdateGrub()
 	if err != nil {
+		exitCode = _STATE_TY_FAILED_UPDATE_GRUB
 		goto failure
 	}
 	if evHandler != nil {
 		evHandler(int32(_OP_TY_COMMIT), int32(_STATE_TY_SUCCESS),
 			fmt.Sprintf("%s: %s", _OP_TY_COMMIT.String(), _STATE_TY_SUCCESS.String()))
-		return nil
+		return int(exitCode), nil
 	}
 failure:
 	if evHandler != nil {
-		evHandler(int32(_OP_TY_COMMIT), int32(_STATE_TY_FAILED),
-			fmt.Sprintf("%s: %s: %s", _OP_TY_COMMIT.String(), _STATE_TY_FAILED.String(), err))
+		evHandler(int32(_OP_TY_COMMIT), int32(exitCode),
+			fmt.Sprintf("%s: %s: %s", _OP_TY_COMMIT.String(), exitCode.String(), err))
 	}
-	return err
+	return int(exitCode), err
 }
 
 func (c *Upgrader) IsExists() bool {
@@ -172,39 +197,44 @@ func (c *Upgrader) IsExists() bool {
 	return true
 }
 
-func (c *Upgrader) UpdateGrub() error {
+func (c *Upgrader) UpdateGrub() (stateType, error) {
+	exitCode := _STATE_TY_SUCCESS
 	logger.Info("start update grub")
 	err := util.ExecCommand("update-grub", []string{})
-	return err
+	if err != nil {
+		exitCode = _STATE_TY_FAILED_UPDATE_GRUB
+	}
+	return exitCode, err
 }
 
-func (c *Upgrader) Snapshot(version string, bootEnabled bool) ([]mountpoint.MountPointList, error) {
+func (c *Upgrader) Snapshot(version string, bootEnabled bool) ([]mountpoint.MountPointList, stateType, error) {
 	var mountedPointRepoList []mountpoint.MountPointList
+	exitCode := _STATE_TY_SUCCESS
 	for _, v := range c.conf.RepoList {
 		mountedPointList, err := c.repoSnapshot(v, version, bootEnabled)
 		if err != nil {
-			return mountedPointRepoList, err
+			exitCode = _STATE_TY_FAILED_HANDLING_MOUNTS
+			return mountedPointRepoList, exitCode, err
 		}
 		mountedPointRepoList = append(mountedPointRepoList, mountedPointList)
 	}
-	return mountedPointRepoList, nil
+	return mountedPointRepoList, exitCode, nil
 }
 
 func (c *Upgrader) Rollback(version string,
-	evHandler func(op, state int32, desc string)) (err error) {
+	evHandler func(op, state int32, desc string)) (excode int, err error) {
+	exitCode := _STATE_TY_SUCCESS
 	var mountedPointRepoList []mountpoint.MountPointList
-	if len(version) == 0 {
-		err = errors.New("must special version")
-		goto failure
-	}
-	mountedPointRepoList, err = c.Snapshot(version, false)
+	mountedPointRepoList, exitCode, err = c.Snapshot(version, false)
 	if err != nil {
+		exitCode = _STATE_TY_FAILED_HANDLING_MOUNTS
 		goto failure
 	}
 	for _, v := range c.conf.RepoList {
 		// TODO(jouyouyun): fallback when failure
 		err = c.repoRollback(v, version)
 		if err != nil {
+			exitCode = _STATE_TY_FAILED_OSTREE_ROLLBACK
 			goto failure
 		}
 	}
@@ -225,13 +255,13 @@ func (c *Upgrader) Rollback(version string,
 		evHandler(int32(_OP_TY_ROLLBACK), int32(_STATE_TY_SUCCESS),
 			fmt.Sprintf("%s: %s", _OP_TY_ROLLBACK.String(), _STATE_TY_SUCCESS.String()))
 	}
-	return nil
+	return int(exitCode), nil
 failure:
 	if evHandler != nil {
-		evHandler(int32(_OP_TY_ROLLBACK), int32(_STATE_TY_FAILED),
-			fmt.Sprintf("%s: %s: %s", _OP_TY_ROLLBACK.String(), _STATE_TY_FAILED.String(), err))
+		evHandler(int32(_OP_TY_ROLLBACK), int32(exitCode),
+			fmt.Sprintf("%s: %s: %s", _OP_TY_ROLLBACK.String(), exitCode.String(), err))
 	}
-	return err
+	return int(exitCode), err
 }
 
 func (c *Upgrader) repoCommit(repoConf *config.RepoConfig, newVersion, subject string,
@@ -653,17 +683,25 @@ func (c *Upgrader) GenerateBranchName() (string, error) {
 	return branch.GenInitName(c.conf.Distribution), nil
 }
 
-func (c *Upgrader) ListVersion() ([]string, error) {
+func (c *Upgrader) ListVersion() ([]string, int, error) {
+	exitCode := _STATE_TY_SUCCESS
 	if len(c.conf.RepoList) == 0 {
-		return nil, nil
+		exitCode = _STATE_TY_FAILED_NO_REPO
+		return nil, int(exitCode), nil
 	}
 
 	handler, err := repo.NewRepo(repo.REPO_TY_OSTREE,
 		filepath.Join(c.rootMP, c.conf.RepoList[0].Repo))
 	if err != nil {
-		return nil, err
+		exitCode = _STATE_TY_FAILED_NO_REPO
+		return nil, int(exitCode), err
 	}
-	return handler.List()
+	list, err := handler.List()
+	if err != nil {
+		exitCode = _STATE_TY_FAILED_NO_REPO
+		return nil, int(exitCode), err
+	}
+	return list, int(exitCode), err
 }
 
 func (c *Upgrader) DistributionName() string {
