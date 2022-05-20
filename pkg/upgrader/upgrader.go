@@ -481,18 +481,14 @@ func (c *Upgrader) copyRepoData(rootDir, dataDir string,
 	filterList = append(filterList, repoCacheDir)
 
 	for _, dir := range subscribeList {
-		var currentFilterList []string
-		for _, v := range filterList {
-			if strings.HasPrefix(v, dir) {
-				currentFilterList = append(currentFilterList, v)
-			}
-		}
 		srcDir := filepath.Join(rootDir, dir)
+		filterDirs, filterFiles := util.HandlerFilterList(rootDir, srcDir, filterList)
+
 		if !util.IsExists(srcDir) {
 			logger.Info("[copyRepoData] src dir empty:", srcDir)
 			continue
 		}
-		err := util.CopyDir(srcDir, filepath.Join(dataDir, dir), currentFilterList, true)
+		err := util.CopyDir(srcDir, filepath.Join(dataDir, dir), filterDirs, filterFiles, true)
 		if err != nil {
 			return err
 		}

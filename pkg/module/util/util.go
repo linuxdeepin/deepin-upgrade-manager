@@ -467,10 +467,10 @@ func CompareDirAndCopy(src, dst, cmp string, filter []string) error {
 	return nil
 }
 
-func CopyDir(src, dst string, filterList []string, enableHardlink bool) error {
+func CopyDir(src, dst string, filterDirs, filterFiles []string, enableHardlink bool) error {
 
-	if IsExistsPath(filterList, src) {
-		logger.Debugf("ignore data dir:%s", src)
+	if len(filterDirs) != 0 && IsExistsPath(filterDirs, src) {
+		logger.Debugf("ignore dir path:%s", src)
 		return nil
 	}
 
@@ -505,9 +505,13 @@ func CopyDir(src, dst string, filterList []string, enableHardlink bool) error {
 			logger.Debug("[CopyDir] will remove(char):", dstSub)
 			err = os.RemoveAll(dstSub)
 		case fiStat.Mode&syscall.S_IFDIR == syscall.S_IFDIR:
-			err = CopyDir(srcSub, dstSub, filterList, enableHardlink)
+			err = CopyDir(srcSub, dstSub, filterDirs, filterFiles, enableHardlink)
 		case fiStat.Mode&syscall.S_IFREG == syscall.S_IFREG:
-			err = CopyFile2(srcSub, dstSub, sfi, enableHardlink)
+			if len(filterFiles) != 0 && IsExistsPath(filterFiles, srcSub) {
+				logger.Debugf("ignore file path:%s", srcSub)
+			} else {
+				err = CopyFile2(srcSub, dstSub, sfi, enableHardlink)
+			}
 		default:
 			logger.Debug("unknown file type:", srcSub)
 		}
@@ -743,4 +747,23 @@ func TrimRootdir(rootDir, src string) string {
 	} else {
 		return src
 	}
+}
+
+func HandlerFilterList(rootDir, realDir string, filterList []string) (filterDirs, filterFiles []string) {
+	for _, v := range filterList {
+		realFilter := filepath.Join(rootDir, v)
+		fi, e := os.Stat(realFilter)
+		if e != nil {
+			continue
+
+		}
+		if strings.HasPrefix(realFilter, realDir) {
+			if fi.IsDir() {
+				filterDirs = append(filterDirs, realFilter)
+			} else {
+				filterFiles = append(filterFiles, realFilter)
+			}
+		}
+	}
+	return filterDirs, filterFiles
 }
