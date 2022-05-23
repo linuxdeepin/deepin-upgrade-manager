@@ -207,25 +207,64 @@ func (c *Upgrader) UpdateGrub() (stateType, error) {
 	return exitCode, err
 }
 
-func (c *Upgrader) Snapshot(version string, bootEnabled bool) ([]mountpoint.MountPointList, stateType, error) {
-	var mountedPointRepoList []mountpoint.MountPointList
+func (c *Upgrader) EnableBoot(version string) (stateType, error) {
 	exitCode := _STATE_TY_SUCCESS
-	for _, v := range c.conf.RepoList {
-		mountedPointList, err := c.repoSnapshot(v, version, bootEnabled)
-		if err != nil {
-			exitCode = _STATE_TY_FAILED_HANDLING_MOUNTS
-			return mountedPointRepoList, exitCode, err
-		}
-		mountedPointRepoList = append(mountedPointRepoList, mountedPointList)
+	err := c.Snapshot(version)
+	if err != nil {
+		exitCode = _STATE_TY_FAILED_NO_REPO
+		return exitCode, err
 	}
-	return mountedPointRepoList, exitCode, nil
+	for _, v := range c.conf.RepoList {
+		dataDir := filepath.Join(c.rootMP, v.SnapshotDir, version)
+		err := c.enableSnapshotBoot(dataDir, version)
+		if err != nil {
+			exitCode = _STATE_TY_FAILED_NO_REPO
+			return exitCode, err
+		}
+	}
+	return exitCode, nil
+}
+
+func (c *Upgrader) Snapshot(version string) error {
+	for _, v := range c.conf.RepoList {
+		err := c.repoSnapShot(v, version)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Upgrader) UpdataMount(repoConf *config.RepoConfig, version string) (mountpoint.MountPointList, error) {
+	dataDir := filepath.Join(c.rootMP, repoConf.SnapshotDir, version)
+	mountedPointList, err := c.updataLoaclMount(dataDir)
+	if err != nil {
+		logger.Warning("the fstab file does not exist in the snapshot, read the local fstabl.")
+		mountedPointList, err = c.updataLoaclMount("/")
+		if err != nil {
+			return mountedPointList, err
+		}
+	}
+	mountinfos, err := mountinfo.Load(SelfMountPath)
+	logger.Infof("to update the local mount, you need to reload the mount information")
+	if err != nil {
+		return nil, err
+	}
+	c.mountInfos = mountinfos
+	return mountedPointList, nil
 }
 
 func (c *Upgrader) Rollback(version string,
 	evHandler func(op, state int32, desc string)) (excode int, err error) {
 	exitCode := _STATE_TY_SUCCESS
-	var mountedPointRepoList []mountpoint.MountPointList
-	mountedPointRepoList, exitCode, err = c.Snapshot(version, false)
+	var mountedPointList mountpoint.MountPointList
+	err = c.Snapshot(version)
+	if err != nil {
+		exitCode = _STATE_TY_FAILED_NO_REPO
+		goto failure
+	}
+	// update the mount of the first repo
+	mountedPointList, err = c.UpdataMount(c.conf.RepoList[0], version)
 	if err != nil {
 		exitCode = _STATE_TY_FAILED_HANDLING_MOUNTS
 		goto failure
@@ -241,13 +280,11 @@ func (c *Upgrader) Rollback(version string,
 	c.SaveActiveVersion(version)
 	//restore mount points under initramfs and save action version
 	if len(c.rootMP) != 1 {
-		for _, mountPointList := range mountedPointRepoList {
-			for _, v := range mountPointList {
-				err = util.ExecCommand("umount", []string{v.Dest})
-				logger.Info("restore system mount, will umount:", v.Dest)
-				if err != nil {
-					logger.Warning("failed umount, err:", err)
-				}
+		for _, v := range mountedPointList {
+			err = util.ExecCommand("umount", []string{v.Dest})
+			logger.Info("restore system mount, will umount:", v.Dest)
+			if err != nil {
+				logger.Warning("failed umount, err:", err)
 			}
 		}
 	}
@@ -287,40 +324,11 @@ func (c *Upgrader) repoCommit(repoConf *config.RepoConfig, newVersion, subject s
 	}
 	return nil
 }
-
-func (c *Upgrader) repoSnapshot(repoConf *config.RepoConfig, version string,
-	bootEnabled bool) (mountpoint.MountPointList, error) {
-	var mountedPointList mountpoint.MountPointList
+func (c *Upgrader) repoSnapShot(repoConf *config.RepoConfig, version string) error {
 	handler := c.repoSet[repoConf.Repo]
 	dataDir := filepath.Join(c.rootMP, repoConf.SnapshotDir, version)
 	_ = os.RemoveAll(dataDir)
-	err := handler.Snapshot(version, dataDir)
-	if err != nil {
-		return mountedPointList, err
-	}
-	if !bootEnabled {
-		mountedPointList, err = c.updataLoaclMount(dataDir)
-		if err != nil {
-			logger.Warning("the fstab file does not exist in the snapshot, read the local fstabl.")
-			mountedPointList, err = c.updataLoaclMount("/")
-			if err != nil {
-				return mountedPointList, err
-			}
-		}
-		mountinfos, err := mountinfo.Load(SelfMountPath)
-		logger.Infof("to update the local mount, you need to reload the mount information")
-		if err != nil {
-			return nil, err
-		}
-		c.mountInfos = mountinfos
-	} else {
-		err := c.enableSnapshotBoot(dataDir, version)
-		if err != nil {
-			return mountedPointList, err
-		}
-	}
-
-	return mountedPointList, nil
+	return handler.Snapshot(version, dataDir)
 }
 
 func (c *Upgrader) enableSnapshotBoot(snapDir, version string) error {
