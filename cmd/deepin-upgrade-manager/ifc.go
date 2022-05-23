@@ -58,7 +58,7 @@ func (m *Manager) emitStateChanged(op, state int32, desc string) {
 	}
 }
 
-func (m *Manager) List() ([]string, *dbus.Error) {
+func (m *Manager) Version() ([]string, *dbus.Error) {
 	vers, _, err := m.upgrade.ListVersion()
 	if err != nil {
 		logger.Error("Failed to list version:", err)
