@@ -28,8 +28,8 @@ const (
 )
 
 const (
-	_OP_TY_ROLLBACK opType = iota + 1
-	_OP_TY_COMMIT
+	_OP_TY_COMMIT opType = iota + 1
+	_OP_TY_ROLLBACK
 )
 
 const (
