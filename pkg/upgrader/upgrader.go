@@ -153,6 +153,8 @@ func (c *Upgrader) Commit(newVersion, subject string, useSysData bool,
 		}
 	}
 	c.SaveActiveVersion(newVersion)
+
+	// automatically clear redundant versions
 	if c.IsAutoClean() {
 		err = c.RepoAutoCleanup()
 		if err != nil {
@@ -245,6 +247,7 @@ func (c *Upgrader) UpdataMount(repoConf *config.RepoConfig, version string) (mou
 			return mountedPointList, err
 		}
 	}
+	// need to get mount information again
 	mountinfos, err := mountinfo.Load(SelfMountPath)
 	logger.Infof("to update the local mount, you need to reload the mount information")
 	if err != nil {
@@ -258,19 +261,23 @@ func (c *Upgrader) Rollback(version string,
 	evHandler func(op, state int32, desc string)) (excode int, err error) {
 	exitCode := _STATE_TY_SUCCESS
 	var mountedPointList mountpoint.MountPointList
+
+	// checkout specified version file
 	err = c.Snapshot(version)
 	if err != nil {
 		exitCode = _STATE_TY_FAILED_NO_REPO
 		goto failure
 	}
+
 	// update the mount of the first repo
 	mountedPointList, err = c.UpdataMount(c.conf.RepoList[0], version)
 	if err != nil {
 		exitCode = _STATE_TY_FAILED_HANDLING_MOUNTS
 		goto failure
 	}
+
+	// rollback system files
 	for _, v := range c.conf.RepoList {
-		// TODO(jouyouyun): fallback when failure
 		err = c.repoRollback(v, version)
 		if err != nil {
 			exitCode = _STATE_TY_FAILED_OSTREE_ROLLBACK
@@ -278,7 +285,8 @@ func (c *Upgrader) Rollback(version string,
 		}
 	}
 	c.SaveActiveVersion(version)
-	//restore mount points under initramfs and save action version
+
+	// restore mount points under initramfs and save action version
 	if len(c.rootMP) != 1 {
 		for _, v := range mountedPointList {
 			err = util.ExecCommand("umount", []string{v.Dest})
@@ -306,9 +314,11 @@ func (c *Upgrader) repoCommit(repoConf *config.RepoConfig, newVersion, subject s
 	handler := c.repoSet[repoConf.Repo]
 	dataDir := filepath.Join(c.rootMP, c.conf.CacheDir, c.conf.Distribution)
 	defer func() {
+		// remove tmp dir
 		_ = os.RemoveAll(filepath.Join(c.rootMP, c.conf.CacheDir))
 	}()
 	if useSysData {
+		// judging that the space for creating temporary files is sufficient
 		isEnough, err := c.isDirSpaceEnough(c.rootMP, repoConf.SubscribeList)
 		if err != nil || !isEnough {
 			return err
@@ -360,6 +370,7 @@ func (c *Upgrader) enableSnapshotBoot(snapDir, version string) error {
 			dstFile := filepath.Join(dstDir, fi.Name())
 			isSame, err := util.IsFileSame(localFile, snapFile)
 			if isSame && err == nil {
+				// create file hard link
 				err = util.CopyFile(localFile, dstFile, true)
 			} else {
 				err = util.CopyFile(snapFile, dstFile, false)
@@ -434,7 +445,9 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 	snapDir := filepath.Join(repoConf.SnapshotDir, version)
 	realSubscribeList := util.GetRealDirList(repoConf.SubscribeList, c.rootMP)
 	var err error
+
 	defer func() {
+		// if failed update, restoring the system
 		if err != nil {
 			logger.Warning("failed rollback, recover rollback action")
 			for _, dir := range realSubscribeList {
@@ -445,6 +458,7 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 			}
 		}
 		logger.Debug("need to be deleted tmp dirs:", rollbackDirList)
+		// remove all tmp dir
 		for _, v := range rollbackDirList {
 			if util.IsExists(v) {
 				err = os.RemoveAll(v)
@@ -454,6 +468,7 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 			}
 		}
 	}()
+	// prepare the repo file under the system path
 	for _, dir := range realSubscribeList {
 		err = c.handleRepoRollbak(dir, snapDir, version, &rollbackDirList, util.HandlerDirPrepare)
 		if err != nil {
@@ -461,6 +476,7 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 		}
 	}
 	var bootDir string
+	// repo files replace system files
 	for _, dir := range realSubscribeList {
 		logger.Debug("start replacing the dir:", dir)
 		if strings.HasSuffix(filepath.Join(c.rootMP, "/boot"), dir) {
@@ -473,6 +489,7 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 			return err
 		}
 	}
+	// last replace /boot, protect system boot
 	if len(bootDir) != 0 {
 		err = c.handleRepoRollbak(bootDir, snapDir, version, &rollbackDirList, util.HandlerDirRollback)
 		if err != nil {

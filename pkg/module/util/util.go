@@ -677,6 +677,7 @@ func HandlerDirPrepare(src, dst, version, rootdir string, filter []string) (stri
 }
 
 func handlerDirReplace(dst, newDir, dir string, filter []string) (string, error) {
+	// move files out of subfolders
 	err := MoveDirSubFile(dst, dir, newDir, filter)
 	if err != nil {
 		return "", err
@@ -684,6 +685,7 @@ func handlerDirReplace(dst, newDir, dir string, filter []string) (string, error)
 
 	if IsExists(newDir) {
 		logger.Debugf("start file replacement, dst:%s, newDir:%s", dst, newDir)
+		// Move files out of repo
 		err := SubMoveOut(newDir, dst)
 		if err != nil {
 			logger.Warningf("failed move sub dir, orig:%s, newDir:%s", dst, newDir)
