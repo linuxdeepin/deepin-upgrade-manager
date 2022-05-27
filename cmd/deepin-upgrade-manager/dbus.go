@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	dbusDest            = "org.deepin.AtomicUpgrade"
-	dbusPath            = "/org/deepin/AtomicUpgrade"
+	dbusDest            = "org.deepin.AtomicUpgrade1"
+	dbusPath            = "/org/deepin/AtomicUpgrade1"
 	dbusIFC             = dbusDest
 	dbusSigStateChanged = "StateChanged"
 )
