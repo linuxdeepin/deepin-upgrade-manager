@@ -449,7 +449,7 @@ func (c *Upgrader) handleRepoRollbak(realDir, snapDir, version string,
 func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) error {
 	var rollbackDirList []string
 	snapDir := filepath.Join(repoConf.SnapshotDir, version)
-	realSubscribeList := util.GetRealDirList(repoConf.SubscribeList, c.rootMP)
+	realSubscribeList := util.GetRealDirList(repoConf.SubscribeList, c.rootMP, snapDir)
 	var err error
 
 	defer func() {

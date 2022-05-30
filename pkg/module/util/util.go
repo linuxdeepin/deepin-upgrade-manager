@@ -197,7 +197,7 @@ func IsRootSame(list []string, str string) bool {
 	return false
 }
 
-func GetRealDirList(list []string, rootDir string) []string {
+func GetRealDirList(list []string, rootDir, snapDir string) []string {
 	var newList []string
 	var rootList []string
 	for _, v := range list {
@@ -210,13 +210,24 @@ func GetRealDirList(list []string, rootDir string) []string {
 		if err != nil {
 			real = dir
 		}
+
 		if IsRootSame(rootList, real) {
 			logger.Infof("dir %s is the same root as dir %s, need ignore dir %s", real, v, dir)
 			continue
 		}
-		if !IsExists(dir) {
-			logger.Infof("%s does not exist, need ignore", dir)
+		// Need to confirm that the snapshot and the local directory exist
+		if !IsExists(filepath.Join(rootDir, snapDir, v)) {
+			os.RemoveAll(filepath.Join(rootDir, v))
+			if err != nil {
+				logger.Warning("failed remove dir, err:", err)
+			}
+			logger.Infof("the %s in the %s does not exist, the local %s needs to be deleted",
+				v, snapDir, v)
 			continue
+		} else {
+			if !IsExists(real) {
+				Mkdir(real, filepath.Join(rootDir, snapDir, v))
+			}
 		}
 		newList = append(newList, v)
 	}
@@ -689,6 +700,7 @@ func handlerDirReplace(dst, newDir, dir string, filter []string) (string, error)
 		err := SubMoveOut(newDir, dst)
 		if err != nil {
 			logger.Warningf("failed move sub dir, orig:%s, newDir:%s", dst, newDir)
+			return dir, err
 		}
 	}
 	return dir, nil
