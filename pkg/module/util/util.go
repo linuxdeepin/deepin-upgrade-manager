@@ -371,8 +371,29 @@ func Mkdir(srcDir, dstDir string) error {
 		return err
 	}
 
-	// set uid and gid
+	// set uid, gid, suid, sgid and sbit
 	if stat, ok := fi.Sys().(*syscall.Stat_t); ok {
+		fileMode := fi.Mode().Perm()
+		var isChanged bool
+
+		if stat.Mode&syscall.S_ISUID == syscall.S_ISUID {
+			fileMode |= os.ModeSetuid
+			isChanged = true
+		}
+		if stat.Mode&syscall.S_ISGID == syscall.S_ISGID {
+			fileMode |= os.ModeSetgid
+			isChanged = true
+		}
+		if stat.Mode&syscall.S_ISVTX == syscall.S_ISVTX {
+			fileMode |= os.ModeSticky
+			isChanged = true
+		}
+		if isChanged {
+			err = os.Chmod(dstDir, fileMode)
+			if err != nil {
+				return err
+			}
+		}
 		err = os.Lchown(dstDir, int(stat.Uid), int(stat.Gid))
 		if err != nil {
 			return err
