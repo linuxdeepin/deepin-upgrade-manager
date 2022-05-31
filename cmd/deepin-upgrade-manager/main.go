@@ -144,15 +144,10 @@ func handleAction(m *upgrader.Upgrader, c *config.Config) {
 		fmt.Printf("ActiveVersion:%s\n", c.ActiveVersion)
 		fmt.Printf("AvailVersionList:%s\n", strings.Join(verList, " "))
 	case _ACTION_DELETE:
-		err := m.Delete(*_version)
+		exitCode, err := m.Delete(*_version, nil)
 		if err != nil {
 			logger.Error("failed delete version:", err)
-			os.Exit(FAILED_VERSION_EXISTS)
-		}
-		exCode, err := m.UpdateGrub()
-		if err != nil {
-			logger.Error("failed update grub, err:", err)
-			os.Exit(int(exCode))
+			os.Exit(exitCode)
 		}
 	case _ACTION_SUBJECT:
 		if len(*_version) == 0 {

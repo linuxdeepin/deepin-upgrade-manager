@@ -227,7 +227,7 @@ func (repo *OSTree) Subject(branchName string) (string, error) {
 	if len(lines) < 2 {
 		return "", fmt.Errorf("commit does not exist")
 	}
-	return lines[1], nil
+	return strings.TrimSpace(lines[1]), nil
 }
 
 func doAction(args []string) ([]byte, error) {

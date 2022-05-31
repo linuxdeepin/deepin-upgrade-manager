@@ -58,7 +58,7 @@ func (m *Manager) emitStateChanged(op, state int32, desc string) {
 	}
 }
 
-func (m *Manager) Version() ([]string, *dbus.Error) {
+func (m *Manager) ListVersion() ([]string, *dbus.Error) {
 	vers, _, err := m.upgrade.ListVersion()
 	if err != nil {
 		logger.Error("Failed to list version:", err)
@@ -119,4 +119,44 @@ func (m *Manager) Commit(subject string) *dbus.Error {
 		logger.Info("ending commit a new version")
 	}()
 	return nil
+}
+
+func (m *Manager) Delete(version string) *dbus.Error {
+	if !single.SetSingleInstance() {
+		return dbus.MakeFailedError(errors.New("process already exists"))
+	}
+	go func() {
+		m.DelayAutoQuit()
+		m.mu.Lock()
+		m.running = true
+		m.mu.Unlock()
+		defer func() {
+			m.mu.Lock()
+			m.running = false
+			m.mu.Unlock()
+			single.Remove()
+		}()
+		exitCode, err := m.upgrade.Delete(version, m.emitStateChanged)
+		if err != nil {
+			logger.Errorf("failed to delete version, err: %v, exit code: %d:", err, exitCode)
+			return
+		}
+		logger.Info("ending delete a new version")
+	}()
+	return nil
+}
+
+func (m *Manager) QuerySubject(versions []string) (subjects []string, err *dbus.Error) {
+	if len(versions) == 0 {
+		logger.Error("must special version")
+		return nil, dbus.MakeFailedError(errors.New("must special version"))
+	}
+	for _, v := range versions {
+		sub, err := m.upgrade.Subject(v)
+		if err != nil {
+			logger.Warningf("Failed to get %s subject, err:%v", v, err)
+		}
+		subjects = append(subjects, sub)
+	}
+	return subjects, nil
 }

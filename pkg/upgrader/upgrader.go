@@ -30,6 +30,7 @@ const (
 const (
 	_OP_TY_COMMIT opType = iota + 1
 	_OP_TY_ROLLBACK
+	_OP_TY_DELETE
 )
 
 const (
@@ -41,6 +42,7 @@ const (
 	_STATE_TY_FAILED_OSTREE_INIT
 	_STATE_TY_FAILED_OSTREE_COMMIT
 	_STATE_TY_FAILED_OSTREE_ROLLBACK
+	_STATE_TY_FAILED_VERSION_DELETE
 )
 
 func (state stateType) String() string {
@@ -61,6 +63,8 @@ func (state stateType) String() string {
 		return "failed ostree rollback"
 	case _STATE_TY_FAILED_OSTREE_INIT:
 		return "failed ostree init"
+	case _STATE_TY_FAILED_VERSION_DELETE:
+		return "version not allowed to delete"
 	}
 	return "unknown"
 }
@@ -71,6 +75,8 @@ func (op opType) String() string {
 		return "rollback"
 	case _OP_TY_COMMIT:
 		return "commit"
+	case _OP_TY_DELETE:
+		return "delete"
 	}
 	return "unknown"
 }
@@ -169,8 +175,8 @@ func (c *Upgrader) Commit(newVersion, subject string, useSysData bool,
 	if evHandler != nil {
 		evHandler(int32(_OP_TY_COMMIT), int32(_STATE_TY_SUCCESS),
 			fmt.Sprintf("%s: %s", _OP_TY_COMMIT.String(), _STATE_TY_SUCCESS.String()))
-		return int(exitCode), nil
 	}
+	return int(exitCode), nil
 failure:
 	if evHandler != nil {
 		evHandler(int32(_OP_TY_COMMIT), int32(exitCode),
@@ -647,7 +653,7 @@ func (c *Upgrader) RepoAutoCleanup() error {
 		if i < maxVersion-1 {
 			continue
 		}
-		err = c.Delete(v)
+		_, err = c.Delete(v, nil)
 		if err != nil {
 			logger.Warning(err)
 			break
@@ -656,29 +662,56 @@ func (c *Upgrader) RepoAutoCleanup() error {
 	return nil
 }
 
-func (c *Upgrader) Delete(version string) error {
+func (c *Upgrader) Delete(version string,
+	evHandler func(op, state int32, desc string)) (excode int, err error) {
+	exitCode := _STATE_TY_SUCCESS
+	var bootDir, snapshotDir string
+	var handler repo.Repository
+
 	if len(c.conf.RepoList) == 0 || len(version) == 0 {
-		return errors.New("branch does not exist")
+		err = errors.New("wrong version number")
+		exitCode = _STATE_TY_FAILED_NO_REPO
+		goto failure
 	}
 	if version == c.conf.ActiveVersion {
-		return errors.New("the current activated version does not allow deletion")
+		err = errors.New("the current activated version does not allow deletion")
+		exitCode = _STATE_TY_FAILED_VERSION_DELETE
+		goto failure
 	}
-	handler, err := repo.NewRepo(repo.REPO_TY_OSTREE,
+	handler, err = repo.NewRepo(repo.REPO_TY_OSTREE,
 		filepath.Join(c.rootMP, c.conf.RepoList[0].Repo))
 	if err != nil {
-		return err
+		exitCode = _STATE_TY_FAILED_NO_REPO
+		goto failure
 	}
 	err = handler.Delete(version)
 	if err != nil {
-		return err
+		exitCode = _STATE_TY_FAILED_VERSION_DELETE
+		goto failure
 	}
-	snapshotDir := filepath.Join(c.rootMP, c.conf.RepoList[0].SnapshotDir, version)
+	snapshotDir = filepath.Join(c.rootMP, c.conf.RepoList[0].SnapshotDir, version)
 	logger.Debug("delete tmp snapshot directory:", snapshotDir)
 	_ = os.RemoveAll(snapshotDir)
-	bootDir := filepath.Join(c.rootMP, "boot/snapshot", version)
+	bootDir = filepath.Join(c.rootMP, "boot/snapshot", version)
 	logger.Debug("delete kernel snapshot directory:", bootDir)
 	_ = os.RemoveAll(bootDir)
-	return nil
+
+	exitCode, err = c.UpdateGrub()
+	if err != nil {
+		exitCode = _STATE_TY_FAILED_UPDATE_GRUB
+		goto failure
+	}
+	if evHandler != nil {
+		evHandler(int32(_OP_TY_DELETE), int32(exitCode),
+			fmt.Sprintf("%s: %s", _OP_TY_DELETE.String(), _STATE_TY_SUCCESS.String()))
+	}
+	return int(exitCode), nil
+failure:
+	if evHandler != nil {
+		evHandler(int32(_OP_TY_DELETE), int32(exitCode),
+			fmt.Sprintf("%s: %s: %s", _OP_TY_DELETE.String(), exitCode.String(), err))
+	}
+	return int(exitCode), err
 }
 
 func (c *Upgrader) IsAutoClean() bool {
