@@ -186,32 +186,16 @@ func (repo *OSTree) listRefs() (branch.BranchList, error) {
 	return refs, nil
 }
 
-func (repo *OSTree) Delete(branchName string) error {
-	if !repo.Exist(branchName) {
-		return fmt.Errorf("branch does not exist")
-	}
-	refs, err := repo.listRefs()
+func (repo *OSTree) Delete(commitId string) error {
+	branchName, err := repo.BranchName(commitId)
 	if err != nil {
 		return err
 	}
-	if refs[len(refs)-1] == branchName {
-		return fmt.Errorf("the first version cannot be deleted")
-	}
-	out, err := doAction([]string{"log", "--repo=" + repo.repoDir, branchName})
-	if err != nil {
-		return err
-	}
-	lines := strings.Split(string(out), "\n")
-	rows := strings.Fields(lines[0])
-	if len(rows) < 2 {
-		return fmt.Errorf("commit does not exist")
-	}
-	commit := strings.TrimSpace(rows[1])
 	_, err = doAction([]string{"refs", "--repo=" + repo.repoDir, "--delete", branchName})
 	if err != nil {
 		return err
 	}
-	_, err = doAction([]string{"prune", "--repo=" + repo.repoDir, "--delete-commit=" + commit})
+	_, err = doAction([]string{"prune", "--repo=" + repo.repoDir, "--delete-commit=" + commitId})
 	if err != nil {
 		return err
 	}
@@ -228,6 +212,36 @@ func (repo *OSTree) Subject(branchName string) (string, error) {
 		return "", fmt.Errorf("commit does not exist")
 	}
 	return strings.TrimSpace(lines[1]), nil
+}
+
+func (repo *OSTree) BranchName(commitId string) (string, error) {
+	refs, err := repo.listRefs()
+	if err != nil {
+		return "", fmt.Errorf("repo does not exist")
+	}
+	for _, ref := range refs {
+		id, err := repo.CommitId(ref)
+		if nil == err && commitId == id {
+			return ref, nil
+		}
+	}
+	return "", fmt.Errorf("commit does not exist")
+}
+
+func (repo *OSTree) CommitId(branchName string) (string, error) {
+	if !repo.Exist(branchName) {
+		return "", fmt.Errorf("branch does not exist")
+	}
+	out, err := doAction([]string{"log", "--repo=" + repo.repoDir, branchName})
+	if err != nil {
+		return "", err
+	}
+	lines := strings.Split(string(out), "\n")
+	rows := strings.Fields(lines[0])
+	if len(rows) < 2 {
+		return "", fmt.Errorf("commit does not exist")
+	}
+	return strings.TrimSpace(rows[1]), nil
 }
 
 func doAction(args []string) ([]byte, error) {

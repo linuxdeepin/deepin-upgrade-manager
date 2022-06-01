@@ -662,15 +662,32 @@ func (c *Upgrader) RepoAutoCleanup() error {
 	return nil
 }
 
-func (c *Upgrader) Delete(version string,
+func (c *Upgrader) Delete(commitid string,
 	evHandler func(op, state int32, desc string)) (excode int, err error) {
 	exitCode := _STATE_TY_SUCCESS
-	var bootDir, snapshotDir string
+	var bootDir, snapshotDir, version string
 	var handler repo.Repository
+	var list []string
 
-	if len(c.conf.RepoList) == 0 || len(version) == 0 {
-		err = errors.New("wrong version number")
+	handler, err = repo.NewRepo(repo.REPO_TY_OSTREE,
+		filepath.Join(c.rootMP, c.conf.RepoList[0].Repo))
+	if err != nil {
 		exitCode = _STATE_TY_FAILED_NO_REPO
+		goto failure
+	}
+	version, err = handler.BranchName(commitid)
+	if err != nil {
+		exitCode = _STATE_TY_FAILED_NO_REPO
+		goto failure
+	}
+	list, err = handler.List()
+	if err != nil {
+		exitCode = _STATE_TY_FAILED_NO_REPO
+		goto failure
+	}
+	if version == list[len(list)-1] {
+		err = errors.New("the first version cannot be deleted")
+		exitCode = _STATE_TY_FAILED_VERSION_DELETE
 		goto failure
 	}
 	if version == c.conf.ActiveVersion {
@@ -678,13 +695,8 @@ func (c *Upgrader) Delete(version string,
 		exitCode = _STATE_TY_FAILED_VERSION_DELETE
 		goto failure
 	}
-	handler, err = repo.NewRepo(repo.REPO_TY_OSTREE,
-		filepath.Join(c.rootMP, c.conf.RepoList[0].Repo))
-	if err != nil {
-		exitCode = _STATE_TY_FAILED_NO_REPO
-		goto failure
-	}
-	err = handler.Delete(version)
+
+	err = handler.Delete(commitid)
 	if err != nil {
 		exitCode = _STATE_TY_FAILED_VERSION_DELETE
 		goto failure
@@ -712,6 +724,15 @@ failure:
 			fmt.Sprintf("%s: %s: %s", _OP_TY_DELETE.String(), exitCode.String(), err))
 	}
 	return int(exitCode), err
+}
+
+func (c *Upgrader) GetCommitId(version string) (string, error) {
+	handler, err := repo.NewRepo(repo.REPO_TY_OSTREE,
+		filepath.Join(c.rootMP, c.conf.RepoList[0].Repo))
+	if err != nil {
+		return "", err
+	}
+	return handler.CommitId(version)
 }
 
 func (c *Upgrader) IsAutoClean() bool {

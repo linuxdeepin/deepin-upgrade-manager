@@ -121,7 +121,19 @@ func (m *Manager) Commit(subject string) *dbus.Error {
 	return nil
 }
 
-func (m *Manager) Delete(version string) *dbus.Error {
+func (m *Manager) GetCommitId(version string) (string, *dbus.Error) {
+	if len(version) == 0 {
+		logger.Error("must special version")
+		return "", dbus.MakeFailedError(errors.New("must special version"))
+	}
+	commitid, err := m.upgrade.GetCommitId(version)
+	if err != nil {
+		return commitid, dbus.MakeFailedError(err)
+	}
+	return commitid, nil
+}
+
+func (m *Manager) Delete(commitid string) *dbus.Error {
 	if !single.SetSingleInstance() {
 		return dbus.MakeFailedError(errors.New("process already exists"))
 	}
@@ -136,7 +148,7 @@ func (m *Manager) Delete(version string) *dbus.Error {
 			m.mu.Unlock()
 			single.Remove()
 		}()
-		exitCode, err := m.upgrade.Delete(version, m.emitStateChanged)
+		exitCode, err := m.upgrade.Delete(commitid, m.emitStateChanged)
 		if err != nil {
 			logger.Errorf("failed to delete version, err: %v, exit code: %d:", err, exitCode)
 			return
@@ -146,7 +158,9 @@ func (m *Manager) Delete(version string) *dbus.Error {
 	return nil
 }
 
-func (m *Manager) QuerySubject(versions []string) (subjects []string, err *dbus.Error) {
+func (m *Manager) QuerySubject(versions []string) ([]string, *dbus.Error) {
+	var subjects []string
+
 	if len(versions) == 0 {
 		logger.Error("must special version")
 		return nil, dbus.MakeFailedError(errors.New("must special version"))

@@ -17,8 +17,10 @@ type Repository interface {
 	Diff(baseBranch, targetBranch, dstFile string) error
 	Cat(branchName, filepath, dstFile string) error
 	Previous(targetName string) (string, error)
-	Delete(branchName string) error
+	Delete(commitId string) error
 	Subject(branchName string) (string, error)
+	CommitId(branchName string) (string, error)
+	BranchName(commitId string) (string, error)
 }
 
 const (
