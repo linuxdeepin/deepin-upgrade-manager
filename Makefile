@@ -48,8 +48,6 @@ endif
 	@mkdir -p ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom
 	@cp -f ${PWD}/cmd/initramfs-scripts/* ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom/
 	@mkdir -p ${DESTDIR}${PREFIX}/share/${PRJ}
-	@cp -rf ${PWD}/scripts/apt.conf.d ${DESTDIR}${PREFIX}/share/${PRJ}/
-	@cp -rf ${PWD}/scripts/dpkg.cfg.d ${DESTDIR}${PREFIX}/share/${PRJ}/
 
 uninstall:
 ifeq ($(ARCH),sw_64)
@@ -64,7 +62,6 @@ endif
 	@rm -f ${DESTDIR}${PREFIX}/share/initramfs-tools/hooks/ostree
 	@rm -f ${DESTDIR}${PREFIX}/share/initramfs-tools/hooks/${PROG_UPGRADER}
 	@rm -f ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom/${PROG_UPGRADER}
-	@rm -rf ${DESTDIR}${PREFIX}/share/${PRJ}
 
 clean:
 	@rm -rf ${GOPATH_DIR}
