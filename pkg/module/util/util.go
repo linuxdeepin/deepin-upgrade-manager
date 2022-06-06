@@ -226,8 +226,10 @@ func GetRealDirList(list []string, rootDir, snapDir string) []string {
 			continue
 		} else {
 			if !IsExists(real) {
-				Mkdir(real, filepath.Join(rootDir, snapDir, v))
+				Mkdir(filepath.Join(rootDir, snapDir, v), real)
 			}
+			logger.Infof("the %s does not exist, needs to be created",
+				real)
 		}
 		newList = append(newList, v)
 	}
