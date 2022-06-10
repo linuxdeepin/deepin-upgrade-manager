@@ -481,6 +481,21 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 			return err
 		}
 	}
+	// hardlink need to filter file or dir to prepare dir
+	for _, dir := range rollbackDirList {
+		dirRoot := filepath.Dir(dir)
+		filterDirs, filterFiles := util.HandlerFilterList(c.rootMP, dirRoot, repoConf.FilterList)
+		for _, v := range filterDirs {
+			dest := filepath.Join(dir, strings.TrimLeft(v, dirRoot))
+			util.CopyDir(v, dest, nil, nil, true)
+			logger.Debugf("ignore dir path:%s", dest)
+		}
+		for _, v := range filterFiles {
+			dest := filepath.Join(dir, strings.TrimLeft(v, dirRoot))
+			util.CopyFile(v, dest, true)
+			logger.Debugf("ignore file path:%s", dest)
+		}
+	}
 	var bootDir string
 	// repo files replace system files
 	for _, dir := range realSubscribeList {

@@ -778,7 +778,6 @@ func TrimRootdir(rootDir, src string) string {
 	if len(rootDir) != 1 && strings.HasPrefix(src, rootDir) {
 		if strings.HasSuffix(rootDir, "/") {
 			rootDir = strings.TrimRight(rootDir, "/")
-			println(rootDir)
 		}
 		return strings.TrimPrefix(src, rootDir)
 	} else {
