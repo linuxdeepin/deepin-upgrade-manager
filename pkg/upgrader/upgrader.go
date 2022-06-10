@@ -653,7 +653,12 @@ func (c *Upgrader) RepoAutoCleanup() error {
 		if i < maxVersion-1 {
 			continue
 		}
-		_, err = c.Delete(v, nil)
+		commitid, err := handler.CommitId(v)
+		if err != nil {
+			logger.Warning("failed delete version:", v)
+			continue
+		}
+		_, err = c.Delete(commitid, nil)
 		if err != nil {
 			logger.Warning(err)
 			break
