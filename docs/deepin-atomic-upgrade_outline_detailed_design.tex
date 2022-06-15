@@ -1,0 +1,865 @@
+\documentclass{utart}
+
+\usepackage{enumitem}
+\usepackage{plantuml}
+\usepackage{diagbox} 
+\usepackage{float}
+
+\title{deepin 原子更新详细设计文档}
+\author{liuchenghao}
+
+\setUTClassify{C级商密}
+
+% 设置文档编号
+\setUTIndex{UT-YZGX20220224T_SYS026}
+
+% 设置拟制人信息
+\setUTFiction{刘成昊}{2022-03-23}
+
+% 设置审核人信息
+\setUTReview{闫博文}{2022-04-06}
+
+% 设置批准人信息
+\setUTApprove{闫博文}{2022-04-06}
+
+\begin{document}
+\utMakeTitle{}{1.0.0}{2022-02-22}
+\utMakeChangeLog{
+  1.0 & 创建 & 刘成昊 & 2022-03-23 \\
+  \hline
+  1.1 & 修改技术评审提出问题，详情见详细审计评审报告 & 刘成昊 & 2022-04-06 \\
+  \hline
+  1.2 & 关键数据结构中增加DBus接口描述 & 刘成昊 & 2022-06-15 \\
+  \hline
+}
+\utMakeTOC
+
+\section{概述}
+\subsection{目的}
+本文档是针对 deepin 原子更新程序给出的系统详细设计文档，在本文档中，将给出 deepin 原子更新程序的设计原则、静态结构设计、动态流程设计、非功能性设计等内容。
+\par
+deepin 系统更新程序的设计与实现是基于系统更新的需求分析，总体上将结合结构化设计的方法与文字描述，给出程序结构化的详细设计，与需求分析内容相对应，以保证系统设计的严谨性与可实现性。
+在结构化部分，本文档将主要采取 UML 语言的包图、类图、序列图等进行程序设计。
+\par
+本文档的适用读者为 deepin 原子更新程序的产品经理、设计人员、开发人员、测试人员以及后续维护人员。
+
+\subsection{术语说明}
+\begin{itemize}[leftmargin=4em]
+\item ostree: 是一个用于对Linux操作系统进行版本更新的系统，它可以被视为 "面向操作系统二进制文件的git" 。通常用来做操作系统项目的持续交付；
+\item hardlink: 硬链接，硬链接是通过指向同一个索引节点(inode)来进行文件链接，不支持跨分区或目录链接；
+\item snapshot: 快照，是系统在某一时刻状态的副本;
+\end{itemize}
+
+\subsection{参考资料}
+\begin{itemize}[leftmargin=4em]
+\item \href{https://refspecs.linuxfoundation.org/FHS\_3.0/fhs/index.html}{Filesystem Hierarchy Standard.}
+\item \href{https://ostree.readthedocs.io/en/latest/}{ostree}
+\item \href{https://github.com/linuxdeepin/deepin-styleguide}{deepin 编码规范}
+\end{itemize}
+
+\section{系统设计}
+deepin 系统更新程序最初的目标是将系统状态的变更操作，如软件的安装、更新或卸载，放入到 chroot 中操作；并提供系统快照的管理功能，如快照生成和快照回滚。
+即通过快照构建隔离于当前系统运行环境的 chroot 环境，如此对系统的变更操作，便不会对当前的系统产生影响，仅在变更操作成功后才改变当前系统的状态。
+
+当前阶段，基于时间和 deb 兼容的考虑，系统的变更仍在当前运行环境中进行，不构建 chroot 环境，但在系统变更前生成当前系统的快照。
+
+\subsection{设计原则}
+deepin 更新管理程序基于其需求，实现时需遵循以下原则: 
+\begin{itemize}[leftmargin=4em]
+\item 更新程序应采用管道/过滤器与面向对象相结合的设计风格，流程控制主要采用管道/过滤器风格，功能模块主要采用面向对象风格；
+\item 功能模块之间应避免相互调用，降低模块耦合度；
+\item 模块应遵循最小化职责原则;
+\item 实现时应尽可能只用系统库，禁止引入第三方库，因为需要集成进 \texttt{initrd.img} 中；
+\item 执行时应实现失败处理逻辑，尽可能降低对现有系统的影响；
+\item 应检查每个流程的产物，确认执行成功；
+\item 应遵守 deepin 编码规范；
+\end{itemize}
+
+\subsection{子系统设计}
+\subsubsection{结构设计}
+deepin 更新程序被设计为一个单文件程序，通过命令行参数来执行不同的流程。
+其中 init、commit、rollback、clean 等操作，应进行单例检查，不允许并行执行。
+
+整体结构如下: 
+\begin{center}
+  \begin{adjustbox}{scale=0.75}
+    \begin{plantuml}
+      @startuml
+      package "deepin-atomic-upgrade" {
+        package action {
+          [init] -[hidden]r-> [list]
+          [list] -[hidden]r-> [commit]
+          [commit] -[hidden]r-> [rollback]
+          [rollback] -[hidden]r-> [clean]
+
+          note top of [init]
+          初始化
+          end note
+          note top of [list]
+          版本展示
+          end note
+          note top of [commit]
+          版本提交
+          end note
+          note top of [rollback]
+          版本回滚
+          end note
+          note top of [clean]
+          版本清理
+          end note
+        }
+
+        package "modules" {
+          [upgrader]
+
+          note left of [upgrader]
+          更新管理模块，实现初始化、版本查询、
+          版本提交、版本回滚等接口
+          end note
+        }
+
+        package "objects" {
+          [init] -d-> [upgrader]
+          [list] -d-> [upgrader]
+          [commit] -d-> [upgrader]
+          [rollback] -d-> [upgrader]
+          [clean] -d-> [upgrader]
+
+          [repo] -[hidden]r-> [mountpoint]
+          [mountpoint] -[hidden]r-> [mountinfo]
+          [mountinfo] -[hidden]r-> [util]
+
+          [upgrader] -d-> [repo]
+          [upgrader] -d-> [mountpoint]
+          [upgrader] -d-> [mountinfo]
+          [upgrader] -d-> [util]
+
+          note bottom of [repo]
+          本地 repo 管理模块，
+          提供 repo 管理的抽象接口。
+          ostree、btrfs、zfs 实现这些接口
+          end note
+          note bottom of [mountpoint]
+          挂载点信息模块，实现挂载点
+          的挂载与卸载接口
+          end note
+          note bottom of [mountinfo]
+          /proc/self/mounts 解析模块，
+          并实现查询功能
+          end note
+          note bottom of [util]
+          通用功能接口，包括文件复制、
+          属主权限修改、字符设备创建
+          等功能
+          end note
+        }
+      }
+      @enduml
+    \end{plantuml}
+  \end{adjustbox}
+
+  图 2-1 更新程序结构
+\end{center}
+
+\subsubsection{目录组织设计}
+
+deepin 更新程序对系统文件的组成进行了重新设计，系统文件由快照， \texttt{/vendor} ，\texttt{/persistent}组合组成，结构如下: 
+\begin{center}
+  \begin{adjustbox}{scale=0.75}
+    \begin{plantuml}
+    @startuml
+    package Snapshot {
+      [version1] -[hidden]r-> [version2]
+      [version2] -[hidden]r-> [versionX]
+    }
+    
+    [Repo] -u-> [version1]
+    [Repo] -u-> [version2]
+    [Repo] -u-> [versionX]
+    
+    [ActiveVersion] ..> [versionX]
+    [ActiveVersion] -[hidden]r-> [/vendor]
+    [OS] <-d- [/persistent]
+    [OS] <-d- [/vendor]
+    [OS] <-d- [ActiveVersion]
+    
+    note right of [Repo]
+    位于 /persistent/osroot/repo
+    end note
+    note bottom of Snapshot
+    位于 /persistent/osroot/snapshot
+    end note
+    note right of [/vendor]
+    第三方厂商软件安装的目录
+    end note
+    note right of [/persistent]
+    数据分区
+    end note
+    @enduml
+    \end{plantuml}
+  \end{adjustbox}
+
+  图 2-2 OS 组成
+\end{center}
+
+\subsubsection{repo 设计}
+repo 是 deepin 更新程序中最核心的对象，repo 采用了面向接口的设计方法，定义了 repo 必需的接口，并由具体的 repo 管理技术实现。
+
+repo 理论上需要支持 ostree、btrfs、zfs 三种技术，现阶段只支持ostree。
+
+repo 的组成结构如下: 
+\begin{center}
+  \begin{adjustbox}{scale=0.55}
+    \begin{plantuml}
+      @startuml
+      package Repo {
+        [Interface]
+
+        [ostree] -[hidden]r-> [btrfs]
+        [btrfs] -[hidden]r-> [zfs]
+
+        [Interface] <-d- [ostree]
+        [Interface] <-d- [btrfs]
+        [Interface] <-d- [zfs]
+
+        NewRepo - [Interface]
+      }
+      @enduml
+    \end{plantuml}
+  \end{adjustbox}
+
+  图 2-3 repo 结构
+\end{center}
+
+\subsection{关键流程设计}
+
+\subsubsection{V20 升级至 V23}
+\begin{center}
+  \begin{adjustbox}{scale=0.65}
+    \begin{plantuml}
+      @startuml
+      actor User
+      User -> Upgrade : 执行升级
+      Upgrade -> Upgrade : 安装 AtomicManager
+      Upgrade -> AtomicManager : 调用接口初始化配置文件,并获取最大分区大小
+      alt 空间不足
+      AtomicManager --> Upgrade : 最大分区不足存放仓库
+      end
+      alt 空间不足
+      Upgrade --> User : 弹框空间不足仓库构建失败，是否继续升级
+      end
+      Upgrade -> AtomicManager : 调用接口初始化 repo 仓库
+      AtomicManager --> Upgrade : 初始化仓库结果
+      alt 初始化失败
+      Upgrade --> User : 仓库初始化失败，弹框是否继续升级
+      end
+      Upgrade -> Upgrade : 执行升级
+      Upgrade --> User : 升级结果
+      @enduml
+      \end{plantuml}
+    \end{adjustbox}
+
+    图 2-4 V20升级V23时序图
+\end{center}
+\begin{itemize}[leftmargin=4em]
+  \item AtomicManager 为原子更新程序,Upgrade 为系统更新程序，此图指 V20 升级 V23 的更新程序;
+  \item 升级程序需要先调用\texttt{sudo deepin-upgrade-manager --action=prepare}得到需要备份文件路径;
+  \item 在初始化配置文件时，需要判断当前最大分区大小，是否能够存放仓库，若空间不足则弹框给用户进行选择是否继续升级;
+  \item 在初始化 repo 仓库时，若初始化失败则会进行弹框备份失败，让用户进行选择是否继续升级;  
+\end{itemize}
+
+\subsubsection{V23 安装时初始化仓库}
+\begin{center}
+  \begin{adjustbox}{scale=0.65}
+    \begin{plantuml}
+      @startuml
+      actor User
+      User -> DeepinInstaller : 执行安装
+      DeepinInstaller -> DeepinInstaller : 释放文件
+      DeepinInstaller -> AtomicUpdate : 调用接口初始化仓库
+      AtomicUpdate --> DeepinInstaller : 返回仓库初始化结果
+      alt 初始化失败
+      DeepinInstaller --> User : 仓库初始化失败
+      end
+      DeepinInstaller --> User : 进入系统
+      @enduml
+      \end{plantuml}
+    \end{adjustbox}
+
+    图 2-5 V23 安装器时序图
+\end{center}
+\begin{itemize}[leftmargin=4em]
+  \item AtomicManager 为原子更新程序,DeepinInstaller 为系统安装器;
+  \item 在安装器将 oem 安装包安装完成后需要调用原子更新初始化仓库接口;
+  \item 在安装器进行安装时，新增是否需要做初始化备份的选项;
+  \item 当更新程序初始化仓库失败，不会影响到安装器主流程;
+\end{itemize}
+
+\subsubsection{repo 初始化}
+\paragraph{触发场景}
+\begin{itemize}[leftmargin=4em]
+  \item V20升级V23时会首先初始化此仓库，对文件进行备份;
+  \item 安装器安装系统时会提供是否初始化仓库选项，若点击则对仓库进行初始化;
+  \item 若仓库未初始化则控制中心提供初始化仓库按钮，用户可以从控制中心进行初始化仓库;
+\end{itemize}
+\paragraph{逻辑流程}
+init 不同场景触发流程一致，其流程如下:
+\begin{center}
+  \begin{adjustbox}{scale=0.65}
+    \begin{plantuml}
+      @startuml
+      start
+      :开始初始化;
+      if(配置文件是否存在)then(否)
+      :退出;
+      stop
+      else(是)
+      if(repo 是否存在)then(是)
+      :退出;
+      stop
+      else(否)
+      :version commit;
+      :更新grub模块;
+      :系统重启显示启动项;
+      stop
+      @enduml
+    \end{plantuml}
+  \end{adjustbox}
+
+  图 2-6 repo init
+\end{center}
+
+
+\subsubsection{rootfs 数据准备}
+rootfs 文件夹为系统提交所需内容，其挂载至与 /usr 同级分区中;
+\paragraph{触发场景}
+\begin{itemize}[leftmargin=4em]
+  \item 当 version 提交时会触发此动作;
+\end{itemize}
+\paragraph{逻辑流程}
+\begin{center}
+  \begin{adjustbox}{scale=0.65}
+    \begin{plantuml}
+      @startuml
+      start
+      :提交时触发数据准备;
+      :获取 /usr 文件夹挂载分区;
+      if(判断分区空间大小，是否能够存放rootfs)then(是)
+      else(否)
+      :退出报错;
+      stop
+      endif
+      if(rootfs文件夹是否存在)then(是);
+      :删除rootfs文件夹;
+      else(否);
+      endif
+      
+      :在/usr 同分区下新建rootfs文件夹;
+      :遍历待备份目录文件;
+      :rootfs 文件与待备份文件进行对比;
+      if(是否在同分区下？)then(是)
+      :硬链接;
+      else(否)
+      :拷贝;
+      if(空间是否不足)then(是)
+      :删除rootfs文件夹;
+      :退出并报错;
+      stop;
+      else(否)
+      endif
+      endif
+      :rootfs文件准备完成;
+      stop;
+      @enduml
+    \end{plantuml}
+  \end{adjustbox}
+
+  图 2-7 rootfs 文件准备完成
+\end{center}
+
+\begin{itemize}[leftmargin=4em]
+  \item rootfs 由于其内容为系统文件硬链接，所以位置必须与 /usr 分区相同;
+  \item ostree 支持软链提交，并在回滚时会保留软链;
+\end{itemize}
+
+\subsubsection{version 提交}
+\paragraph{触发场景}
+\begin{itemize}[leftmargin=4em]
+  \item 当 repo 初始化时 sudo deepin-upgrade-manager --action=init，默认会触发一次全
+  量提交;
+  \item 控制中心提供备份系统接口，手动点击时会触发此动作;
+\end{itemize}
+\paragraph{逻辑流程}
+commit 不同场景触发流程一致，其流程如下: 
+\begin{center}
+  \begin{adjustbox}{scale=0.65}
+    \begin{plantuml}
+      @startuml
+      start
+      :开始提交;
+      :解析config.json获取提交目录列表;
+      note left: 循环读取config.json,其中 subscribe-list 为需要提交目录
+      :rootfs文件准备;
+      :生成版本号;
+      :提交rootfs文件;
+      :显示提交版本号;
+      :更新grub;
+      :提交完成;
+      stop;
+      @enduml
+    \end{plantuml}
+  \end{adjustbox}
+
+  图 2-8 repo commit
+\end{center}
+
+\begin{itemize}[leftmargin=4em]
+  \item 读取 config.json 配置文件，内容为待备份文件路径，仓库版本，快照路径，临时存储文件路径;
+\end{itemize}
+\paragraph{错误处理}
+\begin{description}[leftmargin=!]
+  \item[更新rootfs错误:] : 在每次进行更新时会删除 rootfs 文件夹，再进行重新生成;
+\end{description}
+
+\subsubsection{version 回滚}
+\paragraph{触发场景}
+\begin{itemize}[leftmargin=4em]
+  \item 当用户在grub界面选择时会进行触发;
+  \item 当控制中心选择回滚时，会进行版本回滚;
+\end{itemize}
+\paragraph{逻辑流程}
+rollback 不同场景触发流程一致，其流程如下: 
+\begin{center}
+  \begin{adjustbox}{scale=0.75}
+    \begin{plantuml}
+      @startuml
+      start
+      :开始回滚;
+      if(当前是否在initramfs中)then(是)
+      :获取当前挂载根系统的目录;
+      else(否)
+      endif
+      if(确认本地挂载是否与仓库中/etc/fstab挂载点相同)then(不相同)
+      :进行重新挂载;
+      else(相同)
+      endif
+      :检出指定版本至<b>快照目录</b>;
+      note left: 与 repo 同一分区
+      :遍历待回滚目录;
+      if(子目录是否与父目录挂载分区相同?)then(是)
+      :回滚目录同级创建<b>恢复目录</b>;
+      :遍历<b>快照目录</b>文件并与待回滚目录中文件进行比对;
+      else(否)
+      :子目录下创建<b>恢复目录</b>;
+      :遍历<b>快照目录</b>文件并与子目录中文件进行比对;
+      endif
+      if(是否为相同文件)then(是)
+      :硬链接至<b>恢复目录</b>;
+      note left: 将待回滚目录文件硬链接至<b>恢复目录</b>
+      else(否)
+      :拷贝至<b>恢复目录</b>;
+      note right: 将<b>快照目录</b>文件拷贝至<b>恢复目录</b>
+      endif
+      :<b>恢复目录</b>替换待恢复目录;
+      note left: 跨分区时，需要将<b>恢复目录</b>文件移至父目录
+      :更新grub;
+      :回滚完成;
+      stop;
+      @enduml
+    \end{plantuml}
+  \end{adjustbox}
+
+  图 2-9 repo version rollback
+\end{center}
+
+\begin{itemize}[leftmargin=4em]
+  \item 恢复目录: 系统所需的待回滚版本文件,快照目录:  与 repo 同分区目录，内容为仓库检出指定回滚版本硬链接;
+  \item 回滚首先会判断当前系统状态，是否在 initramfs 中，若在 initramfs 中就会识别 –rootfs 参数传入的根系统文件路径，再从新的根文件系统路径获取仓库位置;
+  \item 回滚时，在同一分区在不同目录下进行挂载: 通过临时文件改名直接将系统目录替换;
+  \item 回滚时，在同一分区只在一个目录下进行挂载: 在分区待恢复目录下子目录与父目录同一分区时，需要在恢复目录的同级目录下创建临时目录，当最后文件替换时直接将临时目录进行重命名。当子目录与父目录分区不一致时，需要在子目录下创建临时目录，当最后文件替换时再将临时目录文件进行移出子目录下;
+  \item 在数据替换完成之后，再将系统的 grub 进行更新，显示当前系统的 grub 引导;
+\end{itemize}
+
+\paragraph{错误处理}
+\begin{description}[leftmargin=!]
+  \item[根路径未获取到:] 退出程序并进行报错处理;
+  \item[在 initramfs 回滚时异常:] 在临时目录替换待恢复目录时，将 /boot 目录设置为最后替换，防止失败时无法找到引导项;
+\end{description}
+
+\subsubsection{version 清理}
+\paragraph{触发场景}
+\begin{itemize}[leftmargin=4em]
+  \item 当控制中心选择清理时，会进行版本清理;
+\end{itemize}
+
+\paragraph{逻辑流程}
+clean 不同场景触发流程一致，其流程如下: 
+\begin{center}
+  \begin{adjustbox}{scale=0.65}
+    \begin{plantuml}
+      @startuml
+      :传入 clean 参数调用更新程序;
+      if (是否已有更新程序运行) then (Y)
+      :显示错误信息;
+      else
+      :列出所有 version;
+      if (version 个数是否大于最大保留数量) then (N)
+      :显示提示信息;
+      else
+      :生成待清理版本列表;
+      note right:初始版本不显示
+      while (遍历待清理版本列表)
+      :获取版本对应的提交列表;
+      :删除版本;
+      while (遍历提交列表)
+      :删除提交;
+      endwhile
+      endwhile
+      endif
+      endif
+      stop
+      @enduml
+    \end{plantuml}
+  \end{adjustbox}
+
+  图 2-10 repo version clean
+\end{center}
+\begin{itemize}[leftmargin=4em]
+  \item 版本清理时需要将 ostree 的 branch 中 commit 进行全部删除;
+  \item 最大保留数量在控制中心可以设置;
+  \item 生成待清理版本时不显示初始版本，防止无法还原初始系统;
+\end{itemize}
+
+\subsubsection{grub 更新}
+\paragraph{触发场景}
+\begin{itemize}[leftmargin=4em]
+  \item 当系统进行版本提交时会触发,显示最新版本;
+  \item 当系统进行版本清理会触发，已清理的版本不会进行显示;
+  \item 当系统进行版本回滚时触发，显示回滚后的版本;
+\end{itemize}
+\paragraph{逻辑流程}
+update grub 不同场景触发流程一致，其流程如下: 
+\begin{center}
+  \begin{adjustbox}{scale=0.65}
+    \begin{plantuml}
+      @startuml
+      :开始更新引导项;
+      :设置环境变量;
+      note right: 限制grub显示版本数量
+      :获取当前已备份版本;
+      if(当前/boot中内核与已备份内核是否相同)then(是)
+      :硬链接本机内核至/boot/snapshot 文件夹下;
+      note left:cp -l ”/boot/*” ”/boot/snapshot”
+      else(否)
+      :将已备份版本内核文件拷贝至/boot下;
+      note right:cp ”/persistent/osroot/snapshot/V23.*/boot/*” ”/boot/snapshot”
+      endif
+      :设置init启动参数;
+      :写入grub.cfg配置文件中;
+      note right: /boot/grub/grub.cfg
+      stop
+      @enduml      
+    \end{plantuml}
+  \end{adjustbox}
+
+  图 2-11 update grub
+\end{center}
+\begin{itemize}[leftmargin=4em]
+  \item 引导项显示回滚最大个数可以通过环境变量进行设置;
+  \item 回滚时是将脚本放入 \texttt{grub中}再利用 \texttt{update-grub}命令进行更新;
+  \item 当内核拷贝时，若系统内核与已备份内核 hash 相同则直接将系统内核硬链接，从而节约空间;
+\end{itemize}
+
+
+\subsection{数据结构设计}
+\subsubsection{版本号}
+\paragraph{版本号格式}
+本地仓库的版本号由 \texttt{<distribution>.<major>.<minor>.<date>} 组成。
+\texttt{distribution} 是系统大版本，只允许包含字母和数字，字母全小写，与 \texttt{debian} 中的含义保持一致；
+\texttt{major} 和 \texttt{minor} 是无符号整数，\texttt{major} 在 \texttt{date} 发生变化时自增，并将 \texttt{minor} 重置；
+\texttt{minor} 则是在 \texttt{date} 不变时自增， \texttt{major} 则保持不变；
+\texttt{date} 是当前的时间，由 \texttt{YearMonthDay}组成，如 \texttt{20220222} 。
+
+这里用下面的例子说明版本号的变更方式: 
+
+\begin{quote}
+假设 \texttt{distribution} 为 \texttt{V23} ，\texttt{date} 为 \texttt{20220222} 。
+
+则初始化本地仓库时，版本号则为 \texttt{V23.0.0.20220222} ，在日期不变时，对系统做了一些修改，再次提交时，版本则变为 \texttt{V23.0.1.20220222} 。
+
+而在一天后，再次提交时，版本号则为 \texttt{V23.1.0.20220223}。
+\end{quote}
+\paragraph{版本号比较逻辑}
+\begin{quote}
+Example 1 : 假设 distribution 为 V23，在 2022 年 4 月 1 日安装好系统进行了两
+次提交，则两次的版本号分别为 V23.0.1.20220401 和 V23.0.2.20220401 此时则可
+比较 minor 的大小。\\
+
+Example 2 : 假设 distribution 为 V23，在 2022 年 4 月 1 日安装好系统进行了一
+次提交，在 2022 年 4 月 5 日安装好系统进行了一次提交，则两次的版本号分别为
+V23.0.0.20220401 和 V23.1.0.20220405 此刻可以比较 major 大小。
+\end{quote}
+\subsubsection{Repo}
+Repo 中定义了仓库管理的接口，OSTree 进行实现，数据结构如下: 
+\begin{center}
+  \begin{adjustbox}{scale=0.75}
+    \begin{plantuml}
+      @startuml
+      package Repo {
+        interface Repository {
+          Init() error
+          Exist(string version)(bool)
+          Last() (string, error)
+          List() ([]string, error)
+          Snapshot(version, snapDir string) error
+          Commit(version, subject, dataDir string) error
+          Diff(baseVersion, targetVersion, dstFile string) error
+          Cat(version, filepath, dstFile string) error
+          Previous(version string) (string, error)
+        }
+        class OSTree implements Repository {
+          - repoDir string
+        }
+      }
+      @enduml
+    \end{plantuml}
+  \end{adjustbox}
+
+  图 2-12 repo object
+\end{center}
+\begin{itemize}[leftmargin=4em]
+  \item Init : 初始化仓库，并进行一次全量提交;
+  \item Exist : 判断仓库是否存在此版本;
+  \begin{itemize}[leftmargin=4em]
+    \item version : 字符串类型，传入需判断版本号;
+    \item return : bool 表示此版本是否存在，若存在则为 true ，不存在则为 false;
+  \end{itemize}  
+  \item Last : 获取最后一次提交时版本;
+  \begin{itemize}[leftmargin=4em]
+    \item return : 字符串类型，返回最后一次提交版本;
+  \end{itemize} 
+  \item List: 获取当前仓库所有版本号;
+  \begin{itemize}[leftmargin=4em]
+    \item return : 字符串数组类型，返回的当前仓库版本号列表;
+  \end{itemize} 
+  \item Snapshot: 获取指定版本快照;
+  \begin{itemize}[leftmargin=4em]
+    \item version : 字符串类型，指定版本号;
+    \item snapDir : 字符串类型，获取快照时，存放本地路径;
+  \end{itemize} 
+  \item Commit: 提交文件至仓库;
+  \begin{itemize}[leftmargin=4em]
+    \item version : 字符串类型，指定版本号;
+    \item subject : 字符串类型，此次提交的主题;
+    \item dataDir : 此次提交文件路径;
+  \end{itemize}   
+  \item Diff: 比较两次提交，并输出不同;
+  \begin{itemize}[leftmargin=4em]
+    \item baseVersion : 字符串类型，待比较版本号;
+    \item targetVersion : 字符串类型，需比较版本号;
+    \item dstFile : 字符串类型，两版本中不同内容;
+  \end{itemize} 
+  \item Cat: 获取指定版本，指定内容;
+  \begin{itemize}[leftmargin=4em]
+    \item version : 字符串类型，指定版本号;
+    \item ilepath : 字符串类型，指定版本文件中文件路径;
+    \item dstFile : 字符串类型，获取指定分支指定文件内容;
+  \end{itemize} 
+  \item Previous: 获取指定版本上一个版本号;
+  \begin{itemize}[leftmargin=4em]
+    \item version : 字符串类型，指定版本号;
+    \item return : 字符串类型，返回上一个版本号;
+  \end{itemize} 
+\end{itemize}
+
+\subsubsection{DBus}
+DBus 中定义了外部调用的接口。 
+\begin{itemize}[leftmargin=4em]
+  \item service name：org.deepin.AtomicUpgrade1
+  \item object path：/org/deepin/AtomicUpgrade1
+  \item interface name：org.deepin.AtomicUpgrade1
+\end{itemize}
+
+\paragraph{Methods}
+\begin{itemize}[leftmargin=4em]
+  \item Commit (IN String  subject): 提交当前系统至本地仓库，异步调用，立即返回，若已存在提交或回滚进程则返回dbus错误;
+  \item Rollback (IN String  version): 回滚系统至指定版本，异步调用，立即返回，若已存在提交或回滚进程则返回dbus错误;
+  \item Delete (IN String  version): 删除仓库指定版本，当前激活版本与初始版本无法删除;
+  \item ListVersion (OUT Array<String> list): 获取当前仓库的版本列表;
+  \item QuerySubject (IN Array<String> versions)(OUT Array<String> list): 获取指定版本列表对应主题信息;
+\end{itemize} 
+
+\paragraph{Properties}
+\begin{itemize}[leftmargin=4em]
+  \item ActiveVersion: 当前系统中正在使用仓库的系统版本;
+\end{itemize}
+
+\paragraph{Signals}
+\begin{itemize}[leftmargin=4em]
+  \item StateChanged (Int32 operate, Int32 state, String version,String message): 当前程序改变状态信号通知;
+\end{itemize}
+
+\subsubsection{config.json}
+config.json结构中包含生成，提交，回滚操作所需要的基本数据，数据格式为json，存放路径为\texttt{/persistent/osroot/config.json}。
+
+\begin{itemize}[leftmargin=4em]
+  \item version: 当前原子更新版本;
+  \item distribution: 当前系统发行版本;
+  \item cache\_dir: 当前释放系统文件缓存地址，一般会挂载至根分区;
+  \item active\_version: 当前系统使用仓库文件的激活版本;
+  \item max\_repo\_retention: 最大保存版本数量;
+  \item repo\_list: 数组存储 repo 内部信息;
+    \begin{itemize}[leftmargin=4em]
+    \item repo: repo仓库路径;
+    \item snapshot\_dir: 快照存放路径;
+    \item subscribe\_list: 需要备份文件路径;
+    \end{itemize}
+\end{itemize}
+
+\section{非功能性设计}
+\subsection{性能}
+\subsubsection{性能测试}
+本次测试内容为初始化 repo ，二次提交三次提交仓库，在 HDD 和 SSD 下，在跨分区（跨分区: 将/boot，/var，/ur/local挂载至其他分区）和非跨分区的不同情况下表现，其测试结果如下:
+\begin{table}[H]
+  \begin{tabular}{|c|ccc|}
+  \hline
+             & \multicolumn{3}{c|}{i9-10885H/8GB/4核/SSD/虚拟机(全盘)}                          \\ \hline
+             & \multicolumn{1}{c|}{首次（包含初始化repo）} & \multicolumn{1}{c|}{二次（重启后）} & 三次（重启） \\ \hline
+  备份时间       & \multicolumn{1}{c|}{96}            & \multicolumn{1}{c|}{86}      & 88     \\ \hline
+  准备rootfs时间 & \multicolumn{1}{c|}{11}            & \multicolumn{1}{c|}{9}       & 11     \\ \hline
+  otree提交时间  & \multicolumn{1}{c|}{82}            & \multicolumn{1}{c|}{76}      & 74     \\ \hline
+  删除缓存时间     & \multicolumn{1}{c|}{3}             & \multicolumn{1}{c|}{3}       & 3      \\ \hline
+  \end{tabular}
+  \end{table}
+\begin{table}[H]
+  \begin{tabular}{|c|ccc|}
+  \hline
+              & \multicolumn{3}{c|}{i7-10700/8GB/4核/HHD/虚拟机(全盘)}                           \\ \hline
+              & \multicolumn{1}{c|}{首次（包含初始化repo）} & \multicolumn{1}{c|}{二次（重启后）} & 三次（重启） \\ \hline
+  备份时间       & \multicolumn{1}{c|}{379}           & \multicolumn{1}{c|}{296}     & 299    \\ \hline
+  准备rootfs时间 & \multicolumn{1}{c|}{75}            & \multicolumn{1}{c|}{75}      & 82     \\ \hline
+  otree提交时间  & \multicolumn{1}{c|}{294}           & \multicolumn{1}{c|}{211}     & 210    \\ \hline
+  删除缓存时间     & \multicolumn{1}{c|}{9}             & \multicolumn{1}{c|}{7}       & 7      \\ \hline
+  \end{tabular}
+  \end{table}
+\begin{table}[H]
+  \begin{tabular}{|c|ccc|}
+  \hline
+              & \multicolumn{3}{c|}{i9-10885H/8GB/4核/SSD/虚拟机(跨分区)}                         \\ \hline
+              & \multicolumn{1}{c|}{首次（包含初始化repo）} & \multicolumn{1}{c|}{二次（重启后）} & 三次（重启） \\ \hline
+  备份时间       & \multicolumn{1}{c|}{115}           & \multicolumn{1}{c|}{109}     & 107    \\ \hline
+  准备rootfs时间 & \multicolumn{1}{c|}{34}            & \multicolumn{1}{c|}{38}      & 38     \\ \hline
+  otree提交时间  & \multicolumn{1}{c|}{78}            & \multicolumn{1}{c|}{67}      & 65     \\ \hline
+  删除缓存时间     & \multicolumn{1}{c|}{3}             & \multicolumn{1}{c|}{4}       & 3      \\ \hline
+  \end{tabular}
+  \end{table}
+本次测试内容为在 HDD 和 SSD 不同情况下解压 systemfiles.squashfs 下表现，其测试结果如下:
+\begin{table}[H]
+  \begin{tabular}{|c|cc|cc|}
+  \hline
+   & \multicolumn{2}{c|}{i9-10885H/8GB/4核/SSD/虚拟机} & \multicolumn{2}{c|}{i7-10700/8GB/4核/HHD/虚拟机} \\ \hline
+                          & \multicolumn{1}{c|}{第一次} & 第二次 & \multicolumn{1}{c|}{第一次} & 第二次 \\ \hline
+  repo预制作 & \multicolumn{1}{c|}{42}  & 43  & \multicolumn{1}{c|}{280} & 310 \\ \hline
+  无repo   & \multicolumn{1}{c|}{43}  & 41  & \multicolumn{1}{c|}{140} & 121 \\ \hline
+  \end{tabular}
+  \end{table}
+\begin{table}[H]
+  \begin{tabular}{|c|cc|}
+  \hline
+                          & \multicolumn{2}{c|}{i7-10700/8GB/4核/HHD/物理机} \\ \hline
+                          & \multicolumn{1}{c|}{第一次}        & 第二次        \\ \hline
+  repo预制作 & \multicolumn{1}{c|}{118}        & 122        \\ \hline
+  无repo   & \multicolumn{1}{c|}{65}         & 86         \\ \hline
+  \end{tabular}
+  \end{table}
+  
+\subsubsection{性能分析}
+\begin{itemize}[leftmargin=4em]
+\item 4 核/SSD（增加 1 分半左右，时间增长 70\% 左右），4 核心/HDD（增加 5 分钟+，时间增长 55\% 左右）;
+\item 备份时间主要受 ostree 提交操作影响，占总耗时 70\% 以上;
+\item 在安装阶段生成备份时，预制作 repo 在 SSD 场景有略微（10\% 左右）优化，在 HDD性能会退化;
+\item 准备备份集合 rootfs 时间，在 SSD 上占比 10\% 左右，在 HDD 上 占比 20\%+。（潜在优化项）;
+\end{itemize}
+
+\subsubsection{性能劣化消减方案}
+\begin{itemize}[leftmargin=4em]
+\item 安装器中添加是否生成初始化备份的选项，默认不勾选，减少默认状态下对安装时长的影响；
+\item 数据回滚时，在待备份目录下创建临时目录，再将回滚目录与待备份目录进行比对，若相同则直接将待备份目录文件硬链接至临时目录下，从而减少回滚拷贝文件时间;
+\end{itemize}
+
+\subsection{安全性}
+deepin 更新程序在数据安全,权限安全进行设计:
+
+\subsubsection{数据安全}
+\begin{itemize}[leftmargin=4em]
+  \item 由于程序会访问修改系统文件，所以在更新程序中发生的任何操作都由管理员操作执行;
+\end{itemize}
+
+\subsubsection{权限安全}
+\begin{itemize}[leftmargin=4em]
+  \item 在程序提交和回滚系统文件时不会改变其权限，所以不会导致系统文件的权限问题;
+\end{itemize}
+
+\subsubsection{参数安全}
+\begin{itemize}[leftmargin=4em]
+  \item 在程序内部对恶意传参和参数错误传入都会进行比对，若程序内无此参数设置则会进行报错退出;
+\end{itemize}
+
+\subsection{可靠性}
+\subsubsection{系统版本提交}
+\begin{quote}
+出现系统断电:
+\begin{itemize}
+  \item 利用 ostree 的提交功能，在未完全提交时中断并不会显示至提交列表中；
+\end{itemize}
+出现系统磁盘不足:
+\begin{itemize}
+  \item 更新程序的仓库存放至最大分区中，若其在根分区并空间不足时，会进行报错并退出;
+  \item 在文件提交时会新建 rootfs 文件夹至与 /usr 同分区下，其内容大部分为硬链接，若空间不足时，会退出程序报错并将 rootfs 文件删除;
+\end{itemize}
+出现数据磁盘不足:
+\begin{itemize}
+  \item  当版本提交时，若数据磁盘空间不足，会进行报错退出并将新建 rootfs 文件进行删除;
+\end{itemize}
+\end{quote}
+
+\subsubsection{系统版本回滚}
+\begin{quote}
+出现系统断电:
+\begin{itemize}
+  \item 每次仓库检出版本会将上次缓存进行删除，再重新 checkout;
+  \item 在版本回滚文件替换时，会将引导文件最后替换防止由于系统断电，导致引导错误无法启动系统;
+\end{itemize}
+出现系统磁盘不足:
+\begin{itemize}
+  \item 更新程序的仓库存放至数据分区，会保证其足够大小，仓库回滚时首先在 /usr 同分区下新建 rootfs 文件夹用于存放回滚版本内容，若分区空间不足则会进行报错退出并将其删除;
+\end{itemize}
+\end{quote}
+\subsection{兼容性}
+
+  \subsubsection{V20的升级与回滚}
+    \begin{itemize}
+      \item 在 V20 升级 V23 时，若数据分区的大小不足无法存放仓库，则会自动选择最大分区进行存储;
+      \item 在 V20 升级 V23 时，会将 init 程序进行升级，需其支持参数传入指定内核进行系统启动，防止系统回滚失效;
+      \item V20 与 V23 交互详细流程在本文 2.3.2 详细说明，此功能为原子更新主要功能点;
+    \end{itemize}
+  \subsubsection{V20 兼容性问题}
+  目前 V20 的运行兼容只考虑在 V20 与 V23 的升级回滚，暂不考虑 V20 本身的升级回滚,其不兼容问题如下;
+  \begin{quote}
+    规避出现运行系统环境不兼容问题:
+    \begin{itemize}
+      \item 更新程序为 go 开发，静态编译，运行时不依赖系统环境;
+    \end{itemize}
+    规避出现运行系统目录不兼容问题:
+    \begin{itemize}
+      \item 在 repo 构建时，只与目录相关联，系统的目录结构并未变更;
+    \end{itemize}
+    \end{quote}
+
+\section{部署与实施}
+\subsection{ISO 预装}
+    在 V23 的 ISO 镜像中，需要把原子更新模块期望的系统目录进行集成，其在本文的 2.2.4 和 2.3.1 有详细说明;
+\subsection{安装器初始化}
+    在 安装器对 ISO 安装时，需要对已在ISO集成的期望目录进行循环解压，其在本文 2.3.3 有详细交互图说明;
+
+\end{document}
