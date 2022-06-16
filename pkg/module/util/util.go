@@ -791,13 +791,16 @@ func HandlerFilterList(rootDir, realDir string, filterList []string) (filterDirs
 		fi, e := os.Stat(realFilter)
 		if e != nil {
 			continue
-
 		}
-		if strings.HasPrefix(realFilter, realDir) {
+		real, err := filepath.EvalSymlinks(realFilter)
+		if err != nil {
+			real = realFilter
+		}
+		if strings.HasPrefix(real, realDir) {
 			if fi.IsDir() {
-				filterDirs = append(filterDirs, realFilter)
+				filterDirs = append(filterDirs, real)
 			} else {
-				filterFiles = append(filterFiles, realFilter)
+				filterFiles = append(filterFiles, real)
 			}
 		}
 	}

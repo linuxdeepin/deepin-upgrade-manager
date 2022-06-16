@@ -485,14 +485,35 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 	for _, dir := range rollbackDirList {
 		dirRoot := filepath.Dir(dir)
 		filterDirs, filterFiles := util.HandlerFilterList(c.rootMP, dirRoot, repoConf.FilterList)
+		rootPartition, err := dirinfo.GetDirPartition(dirRoot)
+		if err != nil {
+			logger.Warningf("failed get %s partition", dirRoot)
+			continue
+		}
 		for _, v := range filterDirs {
+			dirPartition, err := dirinfo.GetDirPartition(v)
+			if err != nil {
+				logger.Warningf("failed get %s partition", v)
+				continue
+			}
+			if dirPartition != rootPartition {
+				continue
+			}
 			dest := filepath.Join(dir, strings.TrimLeft(v, dirRoot))
-			util.CopyDir(v, dest, nil, nil, true)
+			util.CopyDir(v, dest, nil, nil, false)
 			logger.Debugf("ignore dir path:%s", dest)
 		}
 		for _, v := range filterFiles {
+			filePartition, err := dirinfo.GetDirPartition(v)
+			if err != nil {
+				logger.Warningf("failed get %s partition", v)
+				continue
+			}
+			if filePartition != rootPartition {
+				continue
+			}
 			dest := filepath.Join(dir, strings.TrimLeft(v, dirRoot))
-			util.CopyFile(v, dest, true)
+			util.CopyFile(v, dest, false)
 			logger.Debugf("ignore file path:%s", dest)
 		}
 	}
