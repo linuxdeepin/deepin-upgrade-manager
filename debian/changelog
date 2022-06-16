@@ -1,3 +1,9 @@
+deepin-upgrade-manager (1.0.4) unstable; urgency=medium
+
+  * Fix auto cleanup
+
+ -- Chenghao Liu <liuchenghao@uniontech.com>  Thu, 16 Jun 2022 9:24:03 +0800
+
 deepin-upgrade-manager (1.0.3) unstable; urgency=medium
 
   * Add dbus interface
