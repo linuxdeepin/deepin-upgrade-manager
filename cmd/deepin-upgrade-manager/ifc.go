@@ -50,9 +50,9 @@ func NewManager(config *config.Config, daemon bool) (*Manager, error) {
 	return m, nil
 }
 
-func (m *Manager) emitStateChanged(op, state int32, desc string) {
+func (m *Manager) emitStateChanged(op, state int32, target, desc string) {
 	err := m.conn.Emit(dbusPath, dbusIFC+"."+dbusSigStateChanged,
-		op, state, desc)
+		op, state, target, desc)
 	if err != nil {
 		logger.Warning("Failed to emit 'StateChanged':", err, op, state, desc)
 	}

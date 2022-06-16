@@ -138,7 +138,7 @@ func (c *Upgrader) SaveActiveVersion(version string) {
 }
 
 func (c *Upgrader) Commit(newVersion, subject string, useSysData bool,
-	evHandler func(op, state int32, desc string)) (excode int, err error) {
+	evHandler func(op, state int32, target, desc string)) (excode int, err error) {
 	exitCode := _STATE_TY_SUCCESS
 	if len(newVersion) == 0 {
 		newVersion, err = c.GenerateBranchName()
@@ -173,13 +173,13 @@ func (c *Upgrader) Commit(newVersion, subject string, useSysData bool,
 		goto failure
 	}
 	if evHandler != nil {
-		evHandler(int32(_OP_TY_COMMIT), int32(_STATE_TY_SUCCESS),
+		evHandler(int32(_OP_TY_COMMIT), int32(_STATE_TY_SUCCESS), newVersion,
 			fmt.Sprintf("%s: %s", _OP_TY_COMMIT.String(), _STATE_TY_SUCCESS.String()))
 	}
 	return int(exitCode), nil
 failure:
 	if evHandler != nil {
-		evHandler(int32(_OP_TY_COMMIT), int32(exitCode),
+		evHandler(int32(_OP_TY_COMMIT), int32(exitCode), newVersion,
 			fmt.Sprintf("%s: %s: %s", _OP_TY_COMMIT.String(), exitCode.String(), err))
 	}
 	return int(exitCode), err
@@ -264,7 +264,7 @@ func (c *Upgrader) UpdataMount(repoConf *config.RepoConfig, version string) (mou
 }
 
 func (c *Upgrader) Rollback(version string,
-	evHandler func(op, state int32, desc string)) (excode int, err error) {
+	evHandler func(op, state int32, target, desc string)) (excode int, err error) {
 	exitCode := _STATE_TY_SUCCESS
 	var mountedPointList mountpoint.MountPointList
 
@@ -303,13 +303,13 @@ func (c *Upgrader) Rollback(version string,
 		}
 	}
 	if evHandler != nil {
-		evHandler(int32(_OP_TY_ROLLBACK), int32(_STATE_TY_SUCCESS),
+		evHandler(int32(_OP_TY_ROLLBACK), int32(_STATE_TY_SUCCESS), version,
 			fmt.Sprintf("%s: %s", _OP_TY_ROLLBACK.String(), _STATE_TY_SUCCESS.String()))
 	}
 	return int(exitCode), nil
 failure:
 	if evHandler != nil {
-		evHandler(int32(_OP_TY_ROLLBACK), int32(exitCode),
+		evHandler(int32(_OP_TY_ROLLBACK), int32(exitCode), version,
 			fmt.Sprintf("%s: %s: %s", _OP_TY_ROLLBACK.String(), exitCode.String(), err))
 	}
 	return int(exitCode), err
@@ -704,7 +704,7 @@ func (c *Upgrader) RepoAutoCleanup() error {
 }
 
 func (c *Upgrader) Delete(commitid string,
-	evHandler func(op, state int32, desc string)) (excode int, err error) {
+	evHandler func(op, state int32, target, desc string)) (excode int, err error) {
 	exitCode := _STATE_TY_SUCCESS
 	var bootDir, snapshotDir, version string
 	var handler repo.Repository
@@ -755,13 +755,13 @@ func (c *Upgrader) Delete(commitid string,
 		goto failure
 	}
 	if evHandler != nil {
-		evHandler(int32(_OP_TY_DELETE), int32(exitCode),
+		evHandler(int32(_OP_TY_DELETE), int32(exitCode), version,
 			fmt.Sprintf("%s: %s", _OP_TY_DELETE.String(), _STATE_TY_SUCCESS.String()))
 	}
 	return int(exitCode), nil
 failure:
 	if evHandler != nil {
-		evHandler(int32(_OP_TY_DELETE), int32(exitCode),
+		evHandler(int32(_OP_TY_DELETE), int32(exitCode), version,
 			fmt.Sprintf("%s: %s: %s", _OP_TY_DELETE.String(), exitCode.String(), err))
 	}
 	return int(exitCode), err
