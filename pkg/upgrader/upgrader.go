@@ -499,7 +499,7 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 			if dirPartition != rootPartition {
 				continue
 			}
-			dest := filepath.Join(dir, strings.TrimLeft(v, dirRoot))
+			dest := filepath.Join(dir, strings.TrimPrefix(v, dirRoot))
 			util.CopyDir(v, dest, nil, nil, false)
 			logger.Debugf("ignore dir path:%s", dest)
 		}
@@ -512,7 +512,7 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 			if filePartition != rootPartition {
 				continue
 			}
-			dest := filepath.Join(dir, strings.TrimLeft(v, dirRoot))
+			dest := filepath.Join(dir, strings.TrimPrefix(v, dirRoot))
 			util.CopyFile(v, dest, false)
 			logger.Debugf("ignore file path:%s", dest)
 		}

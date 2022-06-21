@@ -776,9 +776,8 @@ func HandlerDirRecover(src, dst, version, rootdir string, filter []string) (stri
 
 func TrimRootdir(rootDir, src string) string {
 	if len(rootDir) != 1 && strings.HasPrefix(src, rootDir) {
-		if strings.HasSuffix(rootDir, "/") {
-			rootDir = strings.TrimRight(rootDir, "/")
-		}
+		// need delete last '/'
+		rootDir = strings.TrimSuffix(rootDir, "/")
 		return strings.TrimPrefix(src, rootDir)
 	} else {
 		return src
