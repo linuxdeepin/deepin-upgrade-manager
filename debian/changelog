@@ -1,7 +1,6 @@
 deepin-upgrade-manager (1.0.4) unstable; urgency=medium
 
-  * Fix auto cleanup
-
+  * Fix auto cleanup and integrated to v23
  -- Chenghao Liu <liuchenghao@uniontech.com>  Thu, 16 Jun 2022 9:24:03 +0800
 
 deepin-upgrade-manager (1.0.3) unstable; urgency=medium
