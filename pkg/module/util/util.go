@@ -1,6 +1,7 @@
 package util
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/md5"
 	"crypto/rand"
@@ -15,6 +16,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode"
 )
 
 const (
@@ -24,6 +26,10 @@ const (
 const (
 	_envNamePath = "PATH"
 	_envDelim    = ":"
+)
+
+const (
+	OSInfoPath = "/etc/os-version"
 )
 
 func FixEnvPath() error {
@@ -129,11 +135,16 @@ func ExecCommandWithOut(action string, args []string) ([]byte, error) {
 		buffer.Write(buf)
 		out = buffer.Bytes()
 	}
-	return out, nil
+	var str_buf []byte
+	for _, v := range out {
+		if v != 0 {
+			str_buf = append(str_buf, v)
+		}
+	}
+	return str_buf, nil
 }
 
 func ExecCommand(action string, args []string) error {
-
 	stdout, err := execC(action, args)
 	if err != nil {
 		return err
@@ -227,9 +238,9 @@ func GetRealDirList(list []string, rootDir, snapDir string) []string {
 		} else {
 			if !IsExists(real) {
 				Mkdir(filepath.Join(rootDir, snapDir, v), real)
+				logger.Infof("the %s does not exist, needs to be created",
+					real)
 			}
-			logger.Infof("the %s does not exist, needs to be created",
-				real)
 		}
 		newList = append(newList, v)
 	}
@@ -804,4 +815,50 @@ func HandlerFilterList(rootDir, realDir string, filterList []string) (filterDirs
 		}
 	}
 	return filterDirs, filterFiles
+}
+
+func GetOSInfo(keyname string) (string, error) {
+
+	fh, err := os.Open(OSInfoPath)
+	if err != nil {
+		return "", err
+	}
+	defer fh.Close()
+	// Parse line by line
+	scanner := bufio.NewScanner(fh)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		lineLength := len(line)
+		switch {
+		case lineLength == 0 || line[0] == '#' || line[0] == '[': // Comment
+			continue
+		default:
+			idx := strings.IndexRune(line, '=')
+			if idx < 0 {
+				continue
+			}
+			key := strings.TrimRightFunc(line[:idx], unicode.IsSpace)
+			if key == "" {
+				continue
+			}
+			if keyname == key {
+				value := strings.TrimLeftFunc(line[idx+1:], unicode.IsSpace)
+				return value, nil
+			}
+		}
+	}
+	return "", nil
+}
+
+func SliceToString(slice []string) string {
+	var length int
+	for _, v := range slice {
+		length += len(v)
+	}
+	buf := bytes.NewBuffer(make([]byte, 0, length))
+	for _, item := range slice {
+		buf.WriteString(item)
+		buf.WriteByte('\n')
+	}
+	return buf.String()
 }

@@ -68,7 +68,7 @@ do
             continue
         fi
     fi
-    
+
     rollbackList[${offset}]=${ver}
     offset=$((1+${offset}))
 done
@@ -242,7 +242,7 @@ do
 	    INITRD="${rel_dirname}/initrd.img-${version}"
     elif  test -e "${SNAPSHOT_DIR}/initrd.img-${alt_version}";then
         INITRD="${rel_dirname}/initrd.img-${alt_version}"
-    fi 
+    fi
     LINUX=${rel_dirname}/${basename}
     # for i in "${SNAPSHOT_DIR}/initrd.img-${version}" "${SNAPSHOT_DIR}/initrd.img-${alt_version}"; do
     #     if test -e "$i"; then

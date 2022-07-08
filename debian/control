@@ -19,5 +19,15 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends},
  ostree,
+ deepin-boot-kit,
 Description: uos backup and restore tool
  uos system backup and restore tool in Linux.
+
+Package: deepin-boot-kit
+Architecture: any
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+Description: uos rollback the grub management tool
+ uos system manage rollback grub in Linux.
+

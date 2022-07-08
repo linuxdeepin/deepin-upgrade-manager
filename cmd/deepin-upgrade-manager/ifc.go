@@ -5,6 +5,7 @@ import (
 	"deepin-upgrade-manager/pkg/logger"
 	"deepin-upgrade-manager/pkg/module/repo/branch"
 	"deepin-upgrade-manager/pkg/module/single"
+	"deepin-upgrade-manager/pkg/module/versioninfo"
 	"deepin-upgrade-manager/pkg/upgrader"
 	"errors"
 	"sync"
@@ -107,9 +108,13 @@ func (m *Manager) Commit(subject string) *dbus.Error {
 			single.Remove()
 		}()
 		var version string
+		var err error
 		if !m.upgrade.IsExists() {
 			m.upgrade.Init()
-			version = branch.GenInitName(m.upgrade.DistributionName())
+			version, err = versioninfo.NewVersion()
+			if err != nil {
+				version = branch.GenInitName(m.upgrade.DistributionName())
+			}
 		}
 		exitCode, err := m.upgrade.Commit(version, subject, true, m.emitStateChanged)
 		if err != nil {
@@ -121,19 +126,7 @@ func (m *Manager) Commit(subject string) *dbus.Error {
 	return nil
 }
 
-func (m *Manager) GetCommitId(version string) (string, *dbus.Error) {
-	if len(version) == 0 {
-		logger.Error("must special version")
-		return "", dbus.MakeFailedError(errors.New("must special version"))
-	}
-	commitid, err := m.upgrade.GetCommitId(version)
-	if err != nil {
-		return commitid, dbus.MakeFailedError(err)
-	}
-	return commitid, nil
-}
-
-func (m *Manager) Delete(commitid string) *dbus.Error {
+func (m *Manager) Delete(version string) *dbus.Error {
 	if !single.SetSingleInstance() {
 		return dbus.MakeFailedError(errors.New("process already exists"))
 	}
@@ -148,7 +141,7 @@ func (m *Manager) Delete(commitid string) *dbus.Error {
 			m.mu.Unlock()
 			single.Remove()
 		}()
-		exitCode, err := m.upgrade.Delete(commitid, m.emitStateChanged)
+		exitCode, err := m.upgrade.Delete(version, m.emitStateChanged)
 		if err != nil {
 			logger.Errorf("failed to delete version, err: %v, exit code: %d:", err, exitCode)
 			return

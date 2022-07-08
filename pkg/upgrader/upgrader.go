@@ -10,6 +10,7 @@ import (
 	"deepin-upgrade-manager/pkg/module/repo"
 	"deepin-upgrade-manager/pkg/module/repo/branch"
 	"deepin-upgrade-manager/pkg/module/util"
+	"deepin-upgrade-manager/pkg/module/versioninfo"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -141,10 +142,14 @@ func (c *Upgrader) Commit(newVersion, subject string, useSysData bool,
 	evHandler func(op, state int32, target, desc string)) (excode int, err error) {
 	exitCode := _STATE_TY_SUCCESS
 	if len(newVersion) == 0 {
-		newVersion, err = c.GenerateBranchName()
+		newVersion, err = versioninfo.NewVersion()
 		if err != nil {
-			exitCode = _STATE_TY_FAILED_NO_REPO
-			goto failure
+			logger.Warning("failed add version, from deepin boot kit, err:", err)
+			newVersion, err = c.GenerateBranchName()
+			if err != nil {
+				exitCode = _STATE_TY_FAILED_NO_REPO
+				goto failure
+			}
 		}
 	}
 	if len(subject) == 0 {
@@ -231,6 +236,42 @@ func (c *Upgrader) EnableBoot(version string) (stateType, error) {
 		}
 	}
 	return exitCode, nil
+}
+
+func (c *Upgrader) EnableBootList() (string, int, error) {
+	var exitCode int
+	list, exitCode, err := c.ListVersion()
+	if err != nil {
+		return "", exitCode, err
+	}
+	bootSnapDir := filepath.Join(c.rootMP, "/boot/snapshot")
+	if util.IsExists(bootSnapDir) {
+		os.RemoveAll(bootSnapDir)
+	}
+	for _, v := range list {
+		c.EnableBoot(v)
+	}
+	handler, _ := repo.NewRepo(repo.REPO_TY_OSTREE,
+		filepath.Join(c.rootMP, c.conf.RepoList[0].Repo))
+	systemName, err := util.GetOSInfo("SystemName")
+	if err != nil {
+		logger.Warning("failed get system name, err:", err)
+	}
+	MinorVersion, err := util.GetOSInfo("MinorVersion")
+	if err != nil {
+		logger.Warning("failed get minor version, err:", err)
+	}
+	listInfo := versioninfo.Load(list)
+	for _, v := range list {
+		time, err := handler.CommitTime(v)
+		commitName := systemName + " " + MinorVersion + " " + "(" + strings.ReplaceAll(time, "-", "/") + ")"
+		if err != nil {
+			logger.Warning("failed get commit time, err:", err)
+		}
+		listInfo.SetVersionName(v, commitName)
+	}
+
+	return listInfo.ToJson(), exitCode, nil
 }
 
 func (c *Upgrader) Snapshot(version string) error {
@@ -334,6 +375,7 @@ func (c *Upgrader) repoCommit(repoConf *config.RepoConfig, newVersion, subject s
 			return err
 		}
 	}
+	logger.Debugf("will submitted version to the repo, version:%s, sub:%s, dataDir:%s", newVersion, subject, dataDir)
 	err := handler.Commit(newVersion, subject, dataDir)
 	if err != nil {
 		return err
@@ -689,12 +731,7 @@ func (c *Upgrader) RepoAutoCleanup() error {
 		if i < maxVersion-1 {
 			continue
 		}
-		commitid, err := handler.CommitId(v)
-		if err != nil {
-			logger.Warning("failed delete version:", v)
-			continue
-		}
-		_, err = c.Delete(commitid, nil)
+		_, err = c.Delete(v, nil)
 		if err != nil {
 			logger.Warning(err)
 			break
@@ -703,32 +740,15 @@ func (c *Upgrader) RepoAutoCleanup() error {
 	return nil
 }
 
-func (c *Upgrader) Delete(commitid string,
+func (c *Upgrader) Delete(version string,
 	evHandler func(op, state int32, target, desc string)) (excode int, err error) {
 	exitCode := _STATE_TY_SUCCESS
-	var bootDir, snapshotDir, version string
+	var bootDir, snapshotDir string
 	var handler repo.Repository
-	var list []string
 
-	handler, err = repo.NewRepo(repo.REPO_TY_OSTREE,
-		filepath.Join(c.rootMP, c.conf.RepoList[0].Repo))
-	if err != nil {
+	if len(c.conf.RepoList) == 0 || len(version) == 0 {
+		err = errors.New("wrong version number")
 		exitCode = _STATE_TY_FAILED_NO_REPO
-		goto failure
-	}
-	version, err = handler.BranchName(commitid)
-	if err != nil {
-		exitCode = _STATE_TY_FAILED_NO_REPO
-		goto failure
-	}
-	list, err = handler.List()
-	if err != nil {
-		exitCode = _STATE_TY_FAILED_NO_REPO
-		goto failure
-	}
-	if version == list[len(list)-1] {
-		err = errors.New("the first version cannot be deleted")
-		exitCode = _STATE_TY_FAILED_VERSION_DELETE
 		goto failure
 	}
 	if version == c.conf.ActiveVersion {
@@ -736,8 +756,13 @@ func (c *Upgrader) Delete(commitid string,
 		exitCode = _STATE_TY_FAILED_VERSION_DELETE
 		goto failure
 	}
-
-	err = handler.Delete(commitid)
+	handler, err = repo.NewRepo(repo.REPO_TY_OSTREE,
+		filepath.Join(c.rootMP, c.conf.RepoList[0].Repo))
+	if err != nil {
+		exitCode = _STATE_TY_FAILED_NO_REPO
+		goto failure
+	}
+	err = handler.Delete(version)
 	if err != nil {
 		exitCode = _STATE_TY_FAILED_VERSION_DELETE
 		goto failure
@@ -765,15 +790,6 @@ failure:
 			fmt.Sprintf("%s: %s: %s", _OP_TY_DELETE.String(), exitCode.String(), err))
 	}
 	return int(exitCode), err
-}
-
-func (c *Upgrader) GetCommitId(version string) (string, error) {
-	handler, err := repo.NewRepo(repo.REPO_TY_OSTREE,
-		filepath.Join(c.rootMP, c.conf.RepoList[0].Repo))
-	if err != nil {
-		return "", err
-	}
-	return handler.CommitId(version)
 }
 
 func (c *Upgrader) IsAutoClean() bool {

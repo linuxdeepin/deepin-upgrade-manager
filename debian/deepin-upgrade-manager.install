@@ -1,0 +1,7 @@
+/usr/sbin/deepin-upgrade-manager
+/usr/share/dbus-1/*
+/etc/deepin-upgrade-manager/config.json
+/usr/share/initramfs-tools/hooks/ostree
+/usr/share/initramfs-tools/hooks/deepin-upgrade-manager
+/var/lib/deepin-upgrade-manager/scripts/deepin-upgrade-manager
+/var/lib/deepin-boot-kit/config/atomic.json

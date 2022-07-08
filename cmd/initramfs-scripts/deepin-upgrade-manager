@@ -1,8 +1,7 @@
 #!/bin/sh
-dir=$(cd $(dirname $0);pwd)
-. $(dirname $dir)/functions
-. $(dirname $dir)/local
-. $(dirname $dir)/nfs
+. /scripts/functions
+. /scripts/local
+. /scripts/nfs
 
 PREREQ=""
 prereqs()

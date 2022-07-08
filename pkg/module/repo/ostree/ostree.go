@@ -2,6 +2,7 @@ package ostree
 
 import (
 	"deepin-upgrade-manager/pkg/module/repo/branch"
+	"deepin-upgrade-manager/pkg/module/util"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 type OSTree struct {
@@ -186,16 +188,32 @@ func (repo *OSTree) listRefs() (branch.BranchList, error) {
 	return refs, nil
 }
 
-func (repo *OSTree) Delete(commitId string) error {
-	branchName, err := repo.BranchName(commitId)
+func (repo *OSTree) Delete(branchName string) error {
+	if !repo.Exist(branchName) {
+		return fmt.Errorf("branch does not exist")
+	}
+	refs, err := repo.listRefs()
 	if err != nil {
 		return err
 	}
+	if refs[len(refs)-1] == branchName {
+		return fmt.Errorf("the first version cannot be deleted")
+	}
+	out, err := doAction([]string{"log", "--repo=" + repo.repoDir, branchName})
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(string(out), "\n")
+	rows := strings.Fields(lines[0])
+	if len(rows) < 2 {
+		return fmt.Errorf("commit does not exist")
+	}
+	commit := strings.TrimSpace(rows[1])
 	_, err = doAction([]string{"refs", "--repo=" + repo.repoDir, "--delete", branchName})
 	if err != nil {
 		return err
 	}
-	_, err = doAction([]string{"prune", "--repo=" + repo.repoDir, "--delete-commit=" + commitId})
+	_, err = doAction([]string{"prune", "--repo=" + repo.repoDir, "--delete-commit=" + commit})
 	if err != nil {
 		return err
 	}
@@ -214,38 +232,37 @@ func (repo *OSTree) Subject(branchName string) (string, error) {
 	return strings.TrimSpace(lines[1]), nil
 }
 
-func (repo *OSTree) BranchName(commitId string) (string, error) {
-	refs, err := repo.listRefs()
-	if err != nil {
-		return "", fmt.Errorf("repo does not exist")
-	}
-	for _, ref := range refs {
-		id, err := repo.CommitId(ref)
-		if nil == err && commitId == id {
-			return ref, nil
-		}
-	}
-	return "", fmt.Errorf("commit does not exist")
-}
-
-func (repo *OSTree) CommitId(branchName string) (string, error) {
-	if !repo.Exist(branchName) {
-		return "", fmt.Errorf("branch does not exist")
-	}
+func (repo *OSTree) CommitTime(branchName string) (string, error) {
 	out, err := doAction([]string{"log", "--repo=" + repo.repoDir, branchName})
 	if err != nil {
 		return "", err
 	}
 	lines := strings.Split(string(out), "\n")
-	rows := strings.Fields(lines[0])
-	if len(rows) < 2 {
+	if len(lines) < 3 {
 		return "", fmt.Errorf("commit does not exist")
 	}
-	return strings.TrimSpace(rows[1]), nil
+
+	for _, v := range lines {
+		if strings.HasPrefix(v, "Date:") {
+			rows := strings.Fields(v)
+			if len(rows) < 3 {
+				return "", nil
+			}
+			t, err := time.ParseInLocation("2006-01-02 15:04:05", rows[1]+" "+rows[2], time.Local)
+			if err != nil {
+				return "", nil
+			}
+			duration, _ := time.ParseDuration("8h")
+			format := t.Add(duration).Format("2006-01-02 15:04:05")
+			return format, nil
+
+		}
+	}
+	return "", nil
 }
 
 func doAction(args []string) ([]byte, error) {
-	out, err := exec.Command("ostree", args...).CombinedOutput()
+	out, err := util.ExecCommandWithOut("ostree", args)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %s", err, string(out))
 	}

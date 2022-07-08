@@ -6,6 +6,7 @@ import (
 	"deepin-upgrade-manager/pkg/module/repo/branch"
 	"deepin-upgrade-manager/pkg/module/single"
 	"deepin-upgrade-manager/pkg/module/util"
+	"deepin-upgrade-manager/pkg/module/versioninfo"
 	"deepin-upgrade-manager/pkg/upgrader"
 	"flag"
 	"fmt"
@@ -19,6 +20,7 @@ const (
 	_ACTION_COMMIT   = "commit"
 	_ACTION_ROLLBACK = "rollback"
 	_ACTION_SNAPSHOT = "snapshot"
+	_ACTION_BOOTLIST = "bootlist"
 	_ACTION_LIST     = "list"
 	_ACTION_DELETE   = "delete"
 	_ACTION_SUBJECT  = "subject"
@@ -31,13 +33,12 @@ const (
 )
 
 var (
-	_config   = flag.String("config", "/etc/deepin-upgrade-manager/config.json", "the configuration file path")
-	_action   = flag.String("action", "list", "the available actions: init, commit, rollback, list")
-	_version  = flag.String("version", "", "the version which rollback")
-	_rootDir  = flag.String("root", "/", "the rootfs mount point")
-	_daemon   = flag.Bool("daemon", false, "start dbus service")
-	_subject  = flag.String("subject", "", "the commit subject")
-	_commitid = flag.String("commitid", "", "the commit id")
+	_config  = flag.String("config", "/etc/deepin-upgrade-manager/config.json", "the configuration file path")
+	_action  = flag.String("action", "list", "the available actions: init, commit, rollback, list")
+	_version = flag.String("version", "", "the version which rollback")
+	_rootDir = flag.String("root", "/", "the rootfs mount point")
+	_daemon  = flag.Bool("daemon", false, "start dbus service")
+	_subject = flag.String("subject", "", "the commit subject")
 )
 
 func main() {
@@ -96,7 +97,10 @@ func handleAction(m *upgrader.Upgrader, c *config.Config) {
 			logger.Error("init repo failed:", err)
 			os.Exit(exitCode)
 		}
-		*_version = branch.GenInitName(c.Distribution)
+		*_version, err = versioninfo.NewVersion()
+		if err != nil {
+			*_version = branch.GenInitName(c.Distribution)
+		}
 		fallthrough
 	case _ACTION_COMMIT:
 		if !single.SetSingleInstance() {
@@ -137,6 +141,13 @@ func handleAction(m *upgrader.Upgrader, c *config.Config) {
 			logger.Errorf("snapshot %q: %v", *_version, err)
 			os.Exit(int(exCode))
 		}
+	case _ACTION_BOOTLIST:
+		versionInfo, exCode, err := m.EnableBootList()
+		if err != nil {
+			logger.Error("failed enable boot list, err:", err)
+			os.Exit(int(exCode))
+		}
+		fmt.Println(versionInfo)
 	case _ACTION_LIST:
 		verList, exitCode, err := m.ListVersion()
 		if err != nil {
@@ -146,7 +157,7 @@ func handleAction(m *upgrader.Upgrader, c *config.Config) {
 		fmt.Printf("ActiveVersion:%s\n", c.ActiveVersion)
 		fmt.Printf("AvailVersionList:%s\n", strings.Join(verList, " "))
 	case _ACTION_DELETE:
-		exitCode, err := m.Delete(*_commitid, nil)
+		exitCode, err := m.Delete(*_version, nil)
 		if err != nil {
 			logger.Error("failed delete version:", err)
 			os.Exit(exitCode)
@@ -162,16 +173,5 @@ func handleAction(m *upgrader.Upgrader, c *config.Config) {
 			os.Exit(FAILED_VERSION_EXISTS)
 		}
 		fmt.Println(sub)
-	case _ACTION_COMMITID:
-		if len(*_version) == 0 {
-			logger.Error("must special version")
-			os.Exit(FAILED_VERSION_EXISTS)
-		}
-		commitid, err := m.GetCommitId(*_version)
-		if err != nil {
-			logger.Error(err)
-			os.Exit(FAILED_VERSION_EXISTS)
-		}
-		fmt.Println(commitid)
 	}
 }

@@ -1,3 +1,9 @@
+deepin-upgrade-manager (1.0.5) unstable; urgency=medium
+
+  * Fit deepin-boot-kit manager grub
+
+ -- Chenghao Liu <liuchenghao@uniontech.com>  Tue, 16 Jul 2022 11:24:03 +0800
+
 deepin-upgrade-manager (1.0.4) unstable; urgency=medium
 
   * Fix auto cleanup and integrated to v23
@@ -7,7 +13,7 @@ deepin-upgrade-manager (1.0.3) unstable; urgency=medium
 
   * Add dbus interface
 
- -- Chenghao Liu <liuchenghao@uniontech.com>  Tues, 7 Jun 2022 16:24:03 +0800
+ -- Chenghao Liu <liuchenghao@uniontech.com>  Tue, 7 Jun 2022 16:24:03 +0800
 
 deepin-upgrade-manager (1.0.2) unstable; urgency=medium
 
@@ -20,4 +26,4 @@ deepin-upgrade-manager (1.0.1) unstable; urgency=medium
 
   * Refactor upgrade manager
 
- -- Chenghao Liu <liuchenghao@uniontech.com>  Tues, 26 April 2022 14:24:03 +0800
+ -- Chenghao Liu <liuchenghao@uniontech.com>  Tue, 26 April 2022 14:24:03 +0800
