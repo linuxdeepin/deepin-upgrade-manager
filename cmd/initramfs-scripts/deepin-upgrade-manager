@@ -1,8 +1,4 @@
 #!/bin/sh
-. /scripts/functions
-. /scripts/local
-. /scripts/nfs
-
 PREREQ=""
 prereqs()
 {
@@ -16,6 +12,11 @@ case "${1}" in
         ;;
 esac
 
+. /scripts/functions
+. /scripts/local
+. /scripts/nfs
+
+
 for x in $(cat /proc/cmdline); do
 	case $x in
 	# The following lines blocked for security reason
@@ -25,21 +26,20 @@ for x in $(cat /proc/cmdline); do
 	esac
 done
 
-if [ "x${back_version}" != "x" ]; then
-	local_premount_used=yes
-	if [ "${readonly}" = "y" ]; then
-		mount -o rw,remount ${rootmnt}
-		readonly=n
-	fi
 
-	if read_fstab_entry /persistent; then
-		log_begin_msg "Mounting /persistent file system"
-		mountfs /persistent
-	fi
-	echo "will rollback to ${rootmnt}/persistent/osroot/snapshot/${back_version}"
-	deepin-upgrade-manager --config="${rootmnt}/etc/deepin-upgrade-manager/config.json" --action=rollback --version="${back_version}" --root="${rootmnt}"
-	if [ "${readonly}" = "n" ]; then
-		mount -o ro,remount ${rootmnt}
-		readonly=y
-	fi
+local_premount_used=yes
+if [ "${readonly}" = "y" ]; then
+	mount -o rw,remount ${rootmnt}
+	readonly=n
+fi
+
+if read_fstab_entry /persistent; then
+	log_begin_msg "Mounting /persistent file system"
+	mountfs /persistent
+fi
+echo "will rollback to ${rootmnt}/persistent/osroot/snapshot/${back_version}"
+deepin-upgrade-manager --config="${rootmnt}/etc/deepin-upgrade-manager/config.json" --action=rollback --version="${back_version}" --root="${rootmnt}"
+if [ "${readonly}" = "n" ]; then
+	mount -o ro,remount ${rootmnt}
+	readonly=y
 fi

@@ -168,7 +168,7 @@ func (b *Bootkit) GenerateDefaultGrub() string {
 	submenu := fmt.Sprintf("submenu 'System Recovery' $menuentry_id_option %s 'gnulinux-advanced-%s' {", menuentry_id_option, UUID)
 	grub = append(grub, submenu)
 	for index, v := range sortList {
-		if index > b.conf.Kit.MaxVersionRetention {
+		if index >= b.conf.Kit.MaxVersionRetention {
 			break
 		}
 		display := v.DisplayInfo

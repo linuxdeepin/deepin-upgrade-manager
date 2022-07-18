@@ -3,10 +3,10 @@ package main
 import (
 	"deepin-upgrade-manager/pkg/config"
 	"deepin-upgrade-manager/pkg/logger"
+	"deepin-upgrade-manager/pkg/module/bootkitinfo"
 	"deepin-upgrade-manager/pkg/module/repo/branch"
 	"deepin-upgrade-manager/pkg/module/single"
 	"deepin-upgrade-manager/pkg/module/util"
-	"deepin-upgrade-manager/pkg/module/versioninfo"
 	"deepin-upgrade-manager/pkg/upgrader"
 	"flag"
 	"fmt"
@@ -97,7 +97,7 @@ func handleAction(m *upgrader.Upgrader, c *config.Config) {
 			logger.Error("init repo failed:", err)
 			os.Exit(exitCode)
 		}
-		*_version, err = versioninfo.NewVersion()
+		*_version, err = bootkitinfo.NewVersion()
 		if err != nil {
 			*_version = branch.GenInitName(c.Distribution)
 		}
@@ -115,14 +115,9 @@ func handleAction(m *upgrader.Upgrader, c *config.Config) {
 		single.Remove()
 		logger.Info("ending commit a new version")
 	case _ACTION_ROLLBACK:
-		logger.Info("start rollback a old version:", *_version)
 		if !single.SetSingleInstance() {
 			logger.Error("process already exists")
 			os.Exit(FAILED_PROCESS_EXISTS)
-		}
-		if len(*_version) == 0 {
-			logger.Error("must special version")
-			os.Exit(FAILED_VERSION_EXISTS)
 		}
 		exitCode, err = m.Rollback(*_version, nil)
 		if err != nil {
@@ -130,7 +125,6 @@ func handleAction(m *upgrader.Upgrader, c *config.Config) {
 			os.Exit(exitCode)
 		}
 		single.Remove()
-		logger.Info("end rollback a old version:", *_version)
 	case _ACTION_SNAPSHOT:
 		if len(*_version) == 0 {
 			logger.Error("must special version")

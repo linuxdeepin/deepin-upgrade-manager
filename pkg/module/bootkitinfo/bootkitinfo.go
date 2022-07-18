@@ -1,4 +1,4 @@
-package versioninfo
+package bootkitinfo
 
 import (
 	"deepin-upgrade-manager/pkg/module/dirinfo"
@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-type VersionInfo struct {
+type BootInfo struct {
 	Version     string `json:"version"`
 	Kernel      string `json:"kernel"`
 	Initrd      string `json:"initrd"`
@@ -19,10 +19,10 @@ type VersionInfo struct {
 	DisplayInfo string `json:"display"`
 }
 
-type VersionInfos []*VersionInfo
+type BootInfos []*BootInfo
 
-type VersionInfoList struct {
-	VersionList VersionInfos `json:"version_list"`
+type BootInfoList struct {
+	VersionList BootInfos `json:"version_list"`
 }
 
 const (
@@ -31,17 +31,16 @@ const (
 	DEEPIN_BOOT_KIT   = "/usr/sbin/deepin-boot-kit"
 )
 
-func (infolist VersionInfoList) ToJson() string {
+func (infolist BootInfoList) ToJson() string {
 	b, _ := json.Marshal(&infolist)
 	return string(b)
 }
 
-func (list VersionInfos) Less(i, j int) bool {
+func (list BootInfos) Less(i, j int) bool {
 	return generator.Less(list[i].Version, list[j].Version)
-
 }
 
-func (infolist VersionInfoList) Sort() VersionInfoList {
+func (infolist BootInfoList) Sort() BootInfoList {
 	list := infolist
 	sort.SliceStable(list.VersionList, func(i, j int) bool {
 		return list.VersionList.Less(i, j)
@@ -59,7 +58,7 @@ func NewVersion() (string, error) {
 	return version, nil
 }
 
-func (infolist *VersionInfoList) SetVersionName(version, display string) {
+func (infolist *BootInfoList) SetVersionName(version, display string) {
 	for _, v := range infolist.VersionList {
 		if v.Version == version {
 			v.DisplayInfo = display
@@ -67,8 +66,8 @@ func (infolist *VersionInfoList) SetVersionName(version, display string) {
 	}
 }
 
-func Load(versionList []string) VersionInfoList {
-	var infolist VersionInfoList
+func Load(versionList []string) BootInfoList {
+	var infolist BootInfoList
 	var isAcrossPart bool
 
 	rootPartition, _ := dirinfo.GetDirPartition("/")
@@ -79,7 +78,7 @@ func Load(versionList []string) VersionInfoList {
 		isAcrossPart = true
 	}
 	for _, v := range versionList {
-		var info VersionInfo
+		var info BootInfo
 		bootDir := filepath.Join(BOOT_SNAPSHOT_DIR, v)
 		fiList, err := ioutil.ReadDir(bootDir)
 		if err != nil {

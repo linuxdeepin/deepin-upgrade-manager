@@ -3,9 +3,9 @@ package main
 import (
 	"deepin-upgrade-manager/pkg/config"
 	"deepin-upgrade-manager/pkg/logger"
+	"deepin-upgrade-manager/pkg/module/bootkitinfo"
 	"deepin-upgrade-manager/pkg/module/repo/branch"
 	"deepin-upgrade-manager/pkg/module/single"
-	"deepin-upgrade-manager/pkg/module/versioninfo"
 	"deepin-upgrade-manager/pkg/upgrader"
 	"errors"
 	"sync"
@@ -109,9 +109,9 @@ func (m *Manager) Commit(subject string) *dbus.Error {
 		}()
 		var version string
 		var err error
-		if !m.upgrade.IsExists() {
+		if !m.upgrade.IsExistRepo() {
 			m.upgrade.Init()
-			version, err = versioninfo.NewVersion()
+			version, err = bootkitinfo.NewVersion()
 			if err != nil {
 				version = branch.GenInitName(m.upgrade.DistributionName())
 			}

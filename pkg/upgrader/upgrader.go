@@ -3,18 +3,20 @@ package upgrader
 import (
 	"deepin-upgrade-manager/pkg/config"
 	"deepin-upgrade-manager/pkg/logger"
+	"deepin-upgrade-manager/pkg/module/bootkitinfo"
 	"deepin-upgrade-manager/pkg/module/dirinfo"
 	"deepin-upgrade-manager/pkg/module/fstabinfo"
 	"deepin-upgrade-manager/pkg/module/mountinfo"
 	"deepin-upgrade-manager/pkg/module/mountpoint"
+	"deepin-upgrade-manager/pkg/module/records"
 	"deepin-upgrade-manager/pkg/module/repo"
 	"deepin-upgrade-manager/pkg/module/repo/branch"
 	"deepin-upgrade-manager/pkg/module/util"
-	"deepin-upgrade-manager/pkg/module/versioninfo"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -25,7 +27,8 @@ type (
 )
 
 const (
-	SelfMountPath = "/proc/self/mounts"
+	SelfMountPath       = "/proc/self/mounts"
+	SelfRecordStatePath = "/etc/deepin-upgrade-manager/state.records"
 )
 
 const (
@@ -87,6 +90,8 @@ type Upgrader struct {
 
 	mountInfos mountinfo.MountInfoList
 
+	recordsInfo *records.RecordsInfo
+
 	repoSet map[string]repo.Repository
 
 	rootMP string
@@ -98,11 +103,16 @@ func NewUpgrader(conf *config.Config,
 	if err != nil {
 		return nil, err
 	}
+	recordsInfo, err := records.LoadRecords(rootMP, SelfRecordStatePath)
+	if err != nil {
+		return nil, err
+	}
 	info := Upgrader{
-		conf:       conf,
-		mountInfos: mountInfos,
-		repoSet:    make(map[string]repo.Repository),
-		rootMP:     rootMP,
+		conf:        conf,
+		mountInfos:  mountInfos,
+		repoSet:     make(map[string]repo.Repository),
+		rootMP:      rootMP,
+		recordsInfo: recordsInfo,
 	}
 	for _, v := range conf.RepoList {
 		handler, err := repo.NewRepo(repo.REPO_TY_OSTREE, filepath.Join(rootMP, v.Repo))
@@ -116,7 +126,7 @@ func NewUpgrader(conf *config.Config,
 
 func (c *Upgrader) Init() (int, error) {
 	exitCode := _STATE_TY_SUCCESS
-	if c.IsExists() {
+	if c.IsExistRepo() {
 		exitCode = _STATE_TY_FAILED_OSTREE_INIT
 		return int(exitCode), errors.New("failed to initialize because repository exists")
 	}
@@ -142,7 +152,7 @@ func (c *Upgrader) Commit(newVersion, subject string, useSysData bool,
 	evHandler func(op, state int32, target, desc string)) (excode int, err error) {
 	exitCode := _STATE_TY_SUCCESS
 	if len(newVersion) == 0 {
-		newVersion, err = versioninfo.NewVersion()
+		newVersion, err = bootkitinfo.NewVersion()
 		if err != nil {
 			logger.Warning("failed add version, from deepin boot kit, err:", err)
 			newVersion, err = c.GenerateBranchName()
@@ -190,7 +200,7 @@ failure:
 	return int(exitCode), err
 }
 
-func (c *Upgrader) IsExists() bool {
+func (c *Upgrader) IsExistRepo() bool {
 	for _, v := range c.conf.RepoList {
 		if !util.IsExists(v.Repo) {
 			logger.Debugf("%s does not exist", v.Repo)
@@ -261,7 +271,7 @@ func (c *Upgrader) EnableBootList() (string, int, error) {
 	if err != nil {
 		logger.Warning("failed get minor version, err:", err)
 	}
-	listInfo := versioninfo.Load(list)
+	listInfo := bootkitinfo.Load(list)
 	for _, v := range list {
 		time, err := handler.CommitTime(v)
 		commitName := systemName + " " + MinorVersion + " " + "(" + strings.ReplaceAll(time, "-", "/") + ")"
@@ -304,49 +314,103 @@ func (c *Upgrader) UpdataMount(repoConf *config.RepoConfig, version string) (mou
 	return mountedPointList, nil
 }
 
+func (c *Upgrader) IsExistVersion(version string) bool {
+	list, _, err := c.ListVersion()
+	if err != nil {
+		return false
+	}
+	for _, v := range list {
+		if v == version {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Upgrader) getRollbackInfo(version, rootdir string) (string, bool, error) {
+	if len(version) != 0 {
+		if !c.IsExistVersion(version) {
+			return "", false, errors.New("version does not exist")
+		}
+		var isCanRollback bool
+		if len(c.rootMP) != 1 {
+			logger.Info("start rollback a old version in initramfs")
+			isCanRollback = true
+		} else {
+			logger.Info("start ready a old version to rollback")
+			isCanRollback = false
+		}
+		c.recordsInfo.SetReady()
+		c.recordsInfo.SetRollbackInfo(version, rootdir)
+		return version, isCanRollback, nil
+	}
+	if len(version) == 0 && len(c.rootMP) != 1 && c.recordsInfo.IsReadyRollback() {
+		logger.Info("begin to rollback version has been set in the initramfs")
+		backVersion := c.recordsInfo.Version()
+		return backVersion, true, nil
+	}
+	return "", false, nil
+}
+
 func (c *Upgrader) Rollback(version string,
 	evHandler func(op, state int32, target, desc string)) (excode int, err error) {
 	exitCode := _STATE_TY_SUCCESS
-	var mountedPointList mountpoint.MountPointList
-
-	// checkout specified version file
-	err = c.Snapshot(version)
+	backVersion, isCanRollback, err := c.getRollbackInfo(version, c.rootMP)
 	if err != nil {
 		exitCode = _STATE_TY_FAILED_NO_REPO
 		goto failure
 	}
+	if isCanRollback && len(backVersion) != 0 {
+		logger.Info("start rollback a old version:", backVersion)
+		var mountedPointList mountpoint.MountPointList
 
-	// update the mount of the first repo
-	mountedPointList, err = c.UpdataMount(c.conf.RepoList[0], version)
-	if err != nil {
-		exitCode = _STATE_TY_FAILED_HANDLING_MOUNTS
-		goto failure
-	}
-
-	// rollback system files
-	for _, v := range c.conf.RepoList {
-		err = c.repoRollback(v, version)
+		// checkout specified version file
+		err = c.Snapshot(backVersion)
 		if err != nil {
-			exitCode = _STATE_TY_FAILED_OSTREE_ROLLBACK
+			exitCode = _STATE_TY_FAILED_NO_REPO
 			goto failure
 		}
-	}
-	c.SaveActiveVersion(version)
 
-	// restore mount points under initramfs and save action version
-	if len(c.rootMP) != 1 {
-		for _, v := range mountedPointList {
-			err = util.ExecCommand("umount", []string{v.Dest})
-			logger.Info("restore system mount, will umount:", v.Dest)
+		// update the mount of the first repo
+		mountedPointList, err = c.UpdataMount(c.conf.RepoList[0], backVersion)
+		if err != nil {
+			exitCode = _STATE_TY_FAILED_HANDLING_MOUNTS
+			goto failure
+		}
+
+		// rollback system files
+		for _, v := range c.conf.RepoList {
+			err = c.repoRollback(v, backVersion)
 			if err != nil {
-				logger.Warning("failed umount, err:", err)
+				exitCode = _STATE_TY_FAILED_OSTREE_ROLLBACK
+				goto failure
 			}
 		}
+		c.SaveActiveVersion(backVersion)
+		// restore mount points under initramfs and save action version
+		if len(c.rootMP) != 1 {
+			for _, v := range mountedPointList {
+				err = util.ExecCommand("umount", []string{v.Dest})
+				logger.Info("restore system mount, will umount:", v.Dest)
+				if err != nil {
+					logger.Warning("failed umount, err:", err)
+				}
+			}
+		}
+	} else {
+		/*
+			Todo: set and recovery entry timeout
+			err := grub.SetTimeout(0)
+			if err != nil {
+				logger.Warning("failed set the rollback waiting time")
+			}*/
+		logger.Info("start set rollback a old version:", backVersion)
 	}
 	if evHandler != nil {
 		evHandler(int32(_OP_TY_ROLLBACK), int32(_STATE_TY_SUCCESS), version,
 			fmt.Sprintf("%s: %s", _OP_TY_ROLLBACK.String(), _STATE_TY_SUCCESS.String()))
 	}
+	logger.Info("successed run rollback action")
 	return int(exitCode), nil
 failure:
 	if evHandler != nil {
@@ -382,6 +446,7 @@ func (c *Upgrader) repoCommit(repoConf *config.RepoConfig, newVersion, subject s
 	}
 	return nil
 }
+
 func (c *Upgrader) repoSnapShot(repoConf *config.RepoConfig, version string) error {
 	handler := c.repoSet[repoConf.Repo]
 	dataDir := filepath.Join(c.rootMP, repoConf.SnapshotDir, version)
@@ -496,7 +561,8 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 
 	defer func() {
 		// if failed update, restoring the system
-		if err != nil {
+		if err != nil || c.recordsInfo.IsRestore() {
+			c.recordsInfo.SetRestore()
 			logger.Warning("failed rollback, recover rollback action")
 			for _, dir := range realSubscribeList {
 				err := c.handleRepoRollbak(dir, snapDir, version, &rollbackDirList, util.HandlerDirRecover)
@@ -504,12 +570,23 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 					logger.Error("failed recover rollback, err:", err)
 				}
 			}
+			c.recordsInfo.SetFailed()
+		} else {
+			c.recordsInfo.SetSuccessfully()
 		}
 		logger.Debug("need to be deleted tmp dirs:", rollbackDirList)
-		// remove all tmp dir
+		// remove all tmp dir and compatible rollback
 		for _, v := range rollbackDirList {
-			if util.IsExists(v) {
-				err = os.RemoveAll(v)
+			oldDir := filepath.Join(path.Dir(v), string("/.old")+version)
+			newDir := filepath.Join(path.Dir(v), string("/.")+version)
+			if util.IsExists(oldDir) {
+				err = os.RemoveAll(oldDir)
+				if err != nil {
+					logger.Warning("failed remove dir, err:", err)
+				}
+			}
+			if util.IsExists(newDir) {
+				err = os.RemoveAll(newDir)
 				if err != nil {
 					logger.Warning("failed remove dir, err:", err)
 				}
@@ -517,12 +594,15 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 		}
 	}()
 	// prepare the repo file under the system path
-	for _, dir := range realSubscribeList {
-		err = c.handleRepoRollbak(dir, snapDir, version, &rollbackDirList, util.HandlerDirPrepare)
-		if err != nil {
-			return err
+	if c.recordsInfo.IsNeedPrepareRepoFile() {
+		for _, dir := range realSubscribeList {
+			err = c.handleRepoRollbak(dir, snapDir, version, &rollbackDirList, util.HandlerDirPrepare)
+			if err != nil {
+				return err
+			}
 		}
 	}
+
 	// hardlink need to filter file or dir to prepare dir
 	for _, dir := range rollbackDirList {
 		dirRoot := filepath.Dir(dir)
@@ -561,6 +641,7 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 	}
 	var bootDir string
 	// repo files replace system files
+
 	for _, dir := range realSubscribeList {
 		logger.Debug("start replacing the dir:", dir)
 		if strings.HasSuffix(filepath.Join(c.rootMP, "/boot"), dir) {
@@ -580,6 +661,7 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 			return err
 		}
 	}
+
 	return nil
 }
 

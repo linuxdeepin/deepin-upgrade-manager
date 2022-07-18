@@ -58,6 +58,9 @@ install-upgrader:
 	@cp -f ${PWD}/cmd/initramfs-hook/${PROG_UPGRADER} ${DESTDIR}${PREFIX}/share/initramfs-tools/hooks/
 	@cp -f ${PWD}/cmd/initramfs-hook/ostree ${DESTDIR}${PREFIX}/share/initramfs-tools/hooks/
 
+	@mkdir -p ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom
+	@cp -f ${PWD}/cmd/initramfs-scripts/${PROG_UPGRADER} ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom/
+
 install-bootkit:
 	@mkdir -p ${DESTDIR}/usr/share/${PROG_BOOTKIT}/
 	@cp -f ${PWD}/configs/bootkit/config.simple.json  ${DESTDIR}/usr/share/${PROG_BOOTKIT}/config.json
