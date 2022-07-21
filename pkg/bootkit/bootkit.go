@@ -4,6 +4,7 @@ import (
 	"deepin-upgrade-manager/pkg/config"
 	"deepin-upgrade-manager/pkg/logger"
 	"deepin-upgrade-manager/pkg/module/generator"
+	"deepin-upgrade-manager/pkg/module/grub"
 	"deepin-upgrade-manager/pkg/module/util"
 	"fmt"
 	"os"
@@ -153,7 +154,7 @@ func (b *Bootkit) GenerateGrubMenu(menu, linux, initrd, grubcmdlinelinux, grubcm
 }
 
 func (b *Bootkit) GenerateDefaultGrub() string {
-	var grub []string
+	var grubInfos []string
 
 	var list config.VersionListConf
 	for _, v := range b.versionListInfo {
@@ -163,10 +164,16 @@ func (b *Bootkit) GenerateDefaultGrub() string {
 	if len(list) == 0 {
 		return ""
 	}
+	var usersLine string
+	encryptedUsers, err := grub.GetEnabledUsers()
+	if nil == err && len(encryptedUsers) != 0 {
+		usersLine = fmt.Sprintf("--users %s ", strings.Join(encryptedUsers, " "))
+	}
 	UUID := os.Getenv("GRUB_DEVICE_UUID")
 	menuentry_id_option := os.Getenv("menuentry_id_option")
-	submenu := fmt.Sprintf("submenu 'System Recovery' $menuentry_id_option %s 'gnulinux-advanced-%s' {", menuentry_id_option, UUID)
-	grub = append(grub, submenu)
+	submenu := fmt.Sprintf("submenu 'System Recovery' $menuentry_id_option %s 'gnulinux-advanced-%s' %s{",
+		menuentry_id_option, UUID, usersLine)
+	grubInfos = append(grubInfos, submenu)
 	for index, v := range sortList {
 		if index >= b.conf.Kit.MaxVersionRetention {
 			break
@@ -181,10 +188,10 @@ func (b *Bootkit) GenerateDefaultGrub() string {
 		backVersion := fmt.Sprintf("back_version=%s", v.Version)
 		backScheme := fmt.Sprintf("back_scheme=%s", v.Scheme)
 		menus := b.GenerateGrubMenu(menu_entry, v.Kernel, v.Initrd, grubCmdliuxLinux, grubCmdliuxLinuxDefault, backVersion, backScheme)
-		grub = append(grub, menus...)
+		grubInfos = append(grubInfos, menus...)
 	}
-	grub = append(grub, "}")
-	return util.SliceToString(grub)
+	grubInfos = append(grubInfos, "}")
+	return util.SliceToString(grubInfos)
 }
 
 func (b *Bootkit) CopyToolScripts() error {

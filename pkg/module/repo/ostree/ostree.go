@@ -2,7 +2,6 @@ package ostree
 
 import (
 	"deepin-upgrade-manager/pkg/module/repo/branch"
-	"deepin-upgrade-manager/pkg/module/util"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -262,7 +261,7 @@ func (repo *OSTree) CommitTime(branchName string) (string, error) {
 }
 
 func doAction(args []string) ([]byte, error) {
-	out, err := util.ExecCommandWithOut("ostree", args)
+	out, err := exec.Command("ostree", args...).CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("%s: %s", err, string(out))
 	}
