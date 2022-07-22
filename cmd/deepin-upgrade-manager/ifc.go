@@ -68,6 +68,11 @@ func (m *Manager) ListVersion() ([]string, *dbus.Error) {
 	return vers, nil
 }
 
+func (m *Manager) ResetGrub() *dbus.Error {
+	m.upgrade.ResetGrub()
+	return nil
+}
+
 func (m *Manager) Rollback(version string) *dbus.Error {
 	if !single.SetSingleInstance() {
 		return dbus.MakeFailedError(errors.New("process already exists"))

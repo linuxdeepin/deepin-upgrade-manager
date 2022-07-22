@@ -1,6 +1,8 @@
 package grub
 
 import (
+	"time"
+
 	"github.com/godbus/dbus"
 )
 
@@ -15,6 +17,32 @@ const (
 	editAuthDBusInterface = dbusInterface + ".EditAuthentication"
 )
 
+func Join() error {
+	ch := make(chan bool)
+	go func(ch chan bool) {
+		for {
+			time.Sleep(100 * time.Millisecond)
+			canExit, err := IsUpdating()
+			if !canExit || err != nil {
+				ch <- true
+			}
+		}
+	}(ch)
+	canExit, err := IsUpdating()
+	if canExit && nil == err {
+		ticker := time.NewTicker(3 * time.Minute)
+		for {
+			select {
+			case <-ticker.C:
+				return nil
+			case <-ch:
+				return nil
+			}
+		}
+	}
+	return nil
+}
+
 func SetTimeout(timeout uint32) error {
 	sysBus, err := dbus.SystemBus()
 	if err != nil {
@@ -24,7 +52,11 @@ func SetTimeout(timeout uint32) error {
 		dbusPath)
 	metho := dbusDest + ".SetTimeout"
 
-	return grubServiceObj.Call(metho, 0, timeout).Store()
+	err = grubServiceObj.Call(metho, 0, timeout).Store()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func Reset() error {
@@ -53,6 +85,7 @@ func TimeOut() (uint32, error) {
 		return 0, err
 	}
 	v := ret.Value().(uint32)
+
 	return v, nil
 }
 

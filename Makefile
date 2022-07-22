@@ -1,5 +1,6 @@
 PRJ=deepin-upgrade-manager
 PROG_UPGRADER=${PRJ}
+PROG_UPGRADER_TOOL=deepin-upgrade-manager-tool
 PROG_BOOTKIT=deepin-boot-kit
 PROG_DBUS=org.deepin.AtomicUpgrade1
 PREFIX=/usr
@@ -30,6 +31,7 @@ build: prepare
 	@env GOPATH=${PWD}/${GOPATH_DIR}:${GOCODE}:${GOPATH} ls -al ${PWD}/${GOPATH_DIR}/src/deepin-upgrade-manager/cmd/deepin-boot-kit/*
 	@env GOPATH=${PWD}/${GOPATH_DIR}:${GOCODE}:${GOPATH} go build -o ${PWD}/${PROG_UPGRADER} ${PRJ}/cmd/${PROG_UPGRADER}
 	@env GOPATH=${PWD}/${GOPATH_DIR}:${GOCODE}:${GOPATH} go build -o ${PWD}/${PROG_BOOTKIT} ${PRJ}/cmd/${PROG_BOOTKIT}
+	@env GOPATH=${PWD}/${GOPATH_DIR}:${GOCODE}:${GOPATH} go build -o ${PWD}/${PROG_UPGRADER_TOOL} ${PRJ}/cmd/${PROG_UPGRADER_TOOL}
 
 install-upgrader:
 #ifeq ($(ARCH),sw_64)
@@ -61,6 +63,13 @@ install-upgrader:
 	@mkdir -p ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom
 	@cp -f ${PWD}/cmd/initramfs-scripts/${PROG_UPGRADER} ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom/
 
+install-upgrader-tool:
+	@mkdir -p ${DESTDIR}${PREFIX}/bin
+	@cp -f ${PWD}/${PROG_UPGRADER_TOOL} ${DESTDIR}${PREFIX}/bin
+
+	@mkdir -p ${DESTDIR}/etc/xdg/autostart/
+	@cp -f ${PWD}/configs/upgrader/deepin-upgrade-manager-tool.desktop ${DESTDIR}/etc/xdg/autostart/deepin-upgrade-manager-tool.desktop
+
 install-bootkit:
 	@mkdir -p ${DESTDIR}/usr/share/${PROG_BOOTKIT}/
 	@cp -f ${PWD}/configs/bootkit/config.simple.json  ${DESTDIR}/usr/share/${PROG_BOOTKIT}/config.json
@@ -77,7 +86,7 @@ install-bootkit:
 	@mkdir -p ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom
 	@cp -f ${PWD}/cmd/initramfs-scripts/${PROG_BOOTKIT} ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom/
 
-install: install-upgrader install-bootkit
+install: install-upgrader install-upgrader-tool install-bootkit
 
 uninstall-upgrader:
 #ifeq ($(ARCH),sw_64)
@@ -92,6 +101,10 @@ uninstall-upgrader:
 	@rm -f ${DESTDIR}${VAR}/${PROG_UPGRADER}/scripts/${PROG_UPGRADER}
 	@rm -f ${DESTDIR}${VAR}/${PROG_BOOTKIT}/config/atomic.json
 
+uninstall-upgrader-tool:
+	@rm -f ${DESTDIR}${PREFIX}/bin/${PROG_UPGRADER_TOOL}
+	@rm -f ${DESTDIR}/etc/xdg/autostart/deepin-upgrade-manager-tool.desktop
+
 uninstall-bootkit:
 	@rm -f ${DESTDIR}${PREFIX}/sbin/${PROG_BOOTKIT}
 	@rm -f ${DESTDIR}/usr/share/${PROG_BOOTKIT}/config.json
@@ -99,11 +112,12 @@ uninstall-bootkit:
 	@rm -f ${DESTDIR}${PREFIX}/share/initramfs-tools/hooks/${PROG_BOOTKIT}
 	@rm -f ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom/${PROG_BOOTKIT}
 
-uninstall: uninstall-upgrader uninstall-bootkit
+uninstall: uninstall-upgrader uninstall-upgrader-tool uninstall-bootkit
 
 clean:
 	@rm -rf ${GOPATH_DIR}
 	@rm -rf ${PWD}/${PROG_UPGRADER}
+	@rm -rf ${PWD}/${PROG_UPGRADER_TOOL}
 	@rm -rf ${PWD}/${PROG_BOOTKIT}
 
 rebuild: clean build

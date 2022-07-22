@@ -24,7 +24,6 @@ const (
 	_ACTION_LIST     = "list"
 	_ACTION_DELETE   = "delete"
 	_ACTION_SUBJECT  = "subject"
-	_ACTION_COMMITID = "commitid"
 )
 
 const (

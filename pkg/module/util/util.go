@@ -862,3 +862,7 @@ func SliceToString(slice []string) string {
 	}
 	return buf.String()
 }
+
+func Tr(text string) string {
+	return text
+}

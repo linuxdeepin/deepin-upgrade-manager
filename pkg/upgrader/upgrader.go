@@ -6,8 +6,12 @@ import (
 	"deepin-upgrade-manager/pkg/module/bootkitinfo"
 	"deepin-upgrade-manager/pkg/module/dirinfo"
 	"deepin-upgrade-manager/pkg/module/fstabinfo"
+	"deepin-upgrade-manager/pkg/module/generator"
+	"deepin-upgrade-manager/pkg/module/grub"
+	"deepin-upgrade-manager/pkg/module/login"
 	"deepin-upgrade-manager/pkg/module/mountinfo"
 	"deepin-upgrade-manager/pkg/module/mountpoint"
+	"deepin-upgrade-manager/pkg/module/notify"
 	"deepin-upgrade-manager/pkg/module/records"
 	"deepin-upgrade-manager/pkg/module/repo"
 	"deepin-upgrade-manager/pkg/module/repo/branch"
@@ -19,7 +23,13 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
+
+	"github.com/godbus/dbus"
 )
+
+var msgSuccessRollBack = util.Tr("Has been successfully recovery system, the current has been back %s")
+var msgFailRollBack = util.Tr("Roll back the failure, the current has been back %s")
 
 type (
 	opType    int32
@@ -95,6 +105,17 @@ type Upgrader struct {
 	repoSet map[string]repo.Repository
 
 	rootMP string
+}
+
+func NewUpgraderTool() (*Upgrader, error) {
+	recordsInfo, err := records.LoadRecords("/", SelfRecordStatePath)
+	if err != nil {
+		return nil, err
+	}
+	info := Upgrader{
+		recordsInfo: recordsInfo,
+	}
+	return &info, nil
 }
 
 func NewUpgrader(conf *config.Config,
@@ -258,8 +279,13 @@ func (c *Upgrader) EnableBootList() (string, int, error) {
 	if util.IsExists(bootSnapDir) {
 		os.RemoveAll(bootSnapDir)
 	}
+	var showList []string
 	for _, v := range list {
+		if generator.Less(v, c.conf.ActiveVersion) {
+			continue
+		}
 		c.EnableBoot(v)
+		showList = append(showList, v)
 	}
 	handler, _ := repo.NewRepo(repo.REPO_TY_OSTREE,
 		filepath.Join(c.rootMP, c.conf.RepoList[0].Repo))
@@ -271,8 +297,8 @@ func (c *Upgrader) EnableBootList() (string, int, error) {
 	if err != nil {
 		logger.Warning("failed get minor version, err:", err)
 	}
-	listInfo := bootkitinfo.Load(list)
-	for _, v := range list {
+	listInfo := bootkitinfo.Load(showList)
+	for _, v := range showList {
 		time, err := handler.CommitTime(v)
 		commitName := systemName + " " + MinorVersion + " " + "(" + strings.ReplaceAll(time, "-", "/") + ")"
 		if err != nil {
@@ -344,7 +370,8 @@ func (c *Upgrader) getRollbackInfo(version, rootdir string) (string, bool, error
 		c.recordsInfo.SetRollbackInfo(version, rootdir)
 		return version, isCanRollback, nil
 	}
-	if len(version) == 0 && len(c.rootMP) != 1 && c.recordsInfo.IsReadyRollback() {
+	if len(version) == 0 && len(c.rootMP) != 1 && c.recordsInfo.IsReadyRollback() &&
+		!c.recordsInfo.IsFailed() && !c.recordsInfo.IsSucceeded() {
 		logger.Info("begin to rollback version has been set in the initramfs")
 		backVersion := c.recordsInfo.Version()
 		return backVersion, true, nil
@@ -398,12 +425,14 @@ func (c *Upgrader) Rollback(version string,
 			}
 		}
 	} else {
-		/*
-			Todo: set and recovery entry timeout
-			err := grub.SetTimeout(0)
-			if err != nil {
-				logger.Warning("failed set the rollback waiting time")
-			}*/
+		err := grub.SetTimeout(0)
+		if err != nil {
+			logger.Warning("failed set the rollback waiting time")
+		} else {
+			time.Sleep(1 * time.Second) // wait for grub set out time
+			grub.Join()
+		}
+
 		logger.Info("start set rollback a old version:", backVersion)
 	}
 	if evHandler != nil {
@@ -933,4 +962,46 @@ func (c *Upgrader) Subject(version string) (string, error) {
 		return sub, errors.New("failed get subject, the current version does not exist version")
 	}
 	return handler.Subject(version)
+}
+
+func (c *Upgrader) ResetGrub() {
+	fd, err := login.Inhibit("shutdown", "org.deepin.AtomicUpgrade1",
+		"Updating the system, please shut down or reboot later.")
+	c.recordsInfo.ResetState()
+	if err != nil {
+		login.Close(fd)
+	}
+}
+
+func (c *Upgrader) SendSystemNotice() error {
+	var backMsg string
+
+	if len(c.recordsInfo.RollbackVersion) == 0 {
+		return errors.New("the rollback version is empty")
+	}
+
+	if c.recordsInfo.IsSucceeded() {
+		backMsg = fmt.Sprintf(msgSuccessRollBack, c.recordsInfo.RollbackVersion)
+	}
+
+	if c.recordsInfo.IsFailed() {
+		backMsg = fmt.Sprintf(msgFailRollBack, c.recordsInfo.RollbackVersion)
+	}
+	if len(backMsg) != 0 {
+		time.Sleep(5 * time.Second) // wait for osd dbus
+		err := notify.SetNotifyText(backMsg)
+		if err != nil {
+			logger.Warning("failed send system notice, err:", err)
+		}
+		sysBus, err := dbus.SystemBus()
+		if err != nil {
+			return err
+		}
+		grubServiceObj := sysBus.Object("org.deepin.AtomicUpgrade1",
+			"/org/deepin/AtomicUpgrade1")
+		metho := "org.deepin.AtomicUpgrade1.ResetGrub"
+
+		return grubServiceObj.Call(metho, 0).Store()
+	}
+	return nil
 }

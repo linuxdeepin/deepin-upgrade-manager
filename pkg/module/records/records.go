@@ -66,6 +66,7 @@ func LoadRecords(rootfs, recordsfile string) (*RecordsInfo, error) {
 	path := filepath.Join(rootfs, recordsfile)
 	info.filename = path
 	info.CurrentState = _UNKNOW_STATE
+	info.TimeOut = 2
 
 	defer info.save()
 	if util.IsExists(path) {
@@ -143,9 +144,8 @@ func (info *RecordsInfo) SetRollbackInfo(version, rootdir string) {
 	info.RollbackVersion = version
 	if len(rootdir) == 1 {
 		out, err := grub.TimeOut()
-		if err != nil {
+		if err != nil && out != 0 {
 			logger.Warning("failed get grub out time")
-
 			info.TimeOut = out
 		} else {
 			info.TimeOut = 2 //default timeout
@@ -176,18 +176,34 @@ func (info *RecordsInfo) IsFailed() bool {
 	return info.CurrentState == _ROLLBACK_FAILED
 }
 
+func (info *RecordsInfo) IsSucceeded() bool {
+	return info.CurrentState == _ROLLBACK_SUCCESSED
+}
+
 func (info *RecordsInfo) IsReadyRollback() bool {
 	return info.CurrentState >= _ROLLBACK_READY_START
 }
 
 func (info *RecordsInfo) SetSuccessfully() {
 	info.CurrentState = _ROLLBACK_SUCCESSED
-	info.RollbackVersion = "" //end rollback need emtpy back version
 	info.save()
 }
 
 func (info *RecordsInfo) SetFailed() {
 	info.CurrentState = _ROLLBACK_FAILED
-	info.RollbackVersion = "" //end rollback need emtpy back version
+	info.save()
+}
+
+func (info *RecordsInfo) ResetState() {
+	currTimeOut, _ := grub.TimeOut()
+
+	if info.TimeOut != 0 && currTimeOut != info.TimeOut {
+		grub.SetTimeout(info.TimeOut)
+	} else {
+		util.ExecCommand("update-grub", []string{}) // need update
+	}
+
+	info.CurrentState = _UNKNOW_STATE
+	info.RollbackVersion = ""
 	info.save()
 }
