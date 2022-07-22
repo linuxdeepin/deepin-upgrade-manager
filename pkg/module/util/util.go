@@ -866,3 +866,29 @@ func SliceToString(slice []string) string {
 func Tr(text string) string {
 	return text
 }
+
+func GetUpgradeText(text string) (string, error) {
+	cmd := exec.Command("gettext", "-d", "deepin-upgrade-manager", text)
+	getTextOut, err := cmd.Output()
+	if err != nil {
+		return text, err
+	}
+	getTextOut = bytes.TrimSpace(getTextOut)
+	if len(getTextOut) == 0 {
+		return text, nil
+	}
+	return string(getTextOut), nil
+}
+
+func GetBootKitText(text string) (string, error) {
+	cmd := exec.Command("gettext", "-d", "deepin-boot-kit", text)
+	getTextOut, err := cmd.Output()
+	if err != nil {
+		return text, err
+	}
+	getTextOut = bytes.TrimSpace(getTextOut)
+	if len(getTextOut) == 0 {
+		return text, nil
+	}
+	return string(getTextOut), nil
+}

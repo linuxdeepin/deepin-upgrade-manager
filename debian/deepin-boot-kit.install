@@ -3,3 +3,4 @@
 /etc/grub.d/15_deepin-boot-kit
 /usr/share/initramfs-tools/hooks/deepin-boot-kit
 /usr/share/initramfs-tools/scripts/init-bottom/deepin-boot-kit
+/usr/share/locale/*/LC_MESSAGES/deepin-boot-kit.mo

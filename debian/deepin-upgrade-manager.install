@@ -5,6 +5,6 @@
 /usr/share/initramfs-tools/hooks/deepin-upgrade-manager
 /var/lib/deepin-upgrade-manager/scripts/deepin-upgrade-manager
 /var/lib/deepin-boot-kit/config/atomic.json
-/usr/share/initramfs-tools/scripts/init-bottom/deepin-upgrade-manager
 /etc/xdg/autostart/deepin-upgrade-manager-tool.desktop
 /usr/bin/deepin-upgrade-manager-tool
+/usr/share/locale/*/LC_MESSAGES/deepin-upgrade-manager.mo

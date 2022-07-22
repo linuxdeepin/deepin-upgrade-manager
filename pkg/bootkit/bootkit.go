@@ -17,6 +17,8 @@ const (
 	ToolScriptDir = "/var/lib/deepin-boot-kit/scripts"
 )
 
+var msgRollBack = util.Tr("System Recovery")
+
 type Bootkit struct {
 	conf            *config.BootConfig
 	toolConfig      config.ToolConfigList
@@ -105,7 +107,6 @@ func (b *Bootkit) GenerateGrubMenu(menu, linux, initrd, grubcmdlinelinux, grubcm
 		if len(recordfail) > 0 {
 			menus = append(menus, recordfail)
 		}
-
 	}
 
 	out, _ := util.ExecCommandWithOut("uname", []string{"-m"})
@@ -171,8 +172,9 @@ func (b *Bootkit) GenerateDefaultGrub() string {
 	}
 	UUID := os.Getenv("GRUB_DEVICE_UUID")
 	menuentry_id_option := os.Getenv("menuentry_id_option")
-	submenu := fmt.Sprintf("submenu 'System Recovery' $menuentry_id_option %s 'gnulinux-advanced-%s' %s{",
-		menuentry_id_option, UUID, usersLine)
+	getTextOut, _ := util.GetBootKitText(msgRollBack)
+	submenu := fmt.Sprintf("submenu '%s' $menuentry_id_option %s 'gnulinux-advanced-%s' %s{",
+		getTextOut, menuentry_id_option, UUID, usersLine)
 	grubInfos = append(grubInfos, submenu)
 	for index, v := range sortList {
 		if index >= b.conf.Kit.MaxVersionRetention {

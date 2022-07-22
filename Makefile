@@ -3,6 +3,8 @@ PROG_UPGRADER=${PRJ}
 PROG_UPGRADER_TOOL=deepin-upgrade-manager-tool
 PROG_BOOTKIT=deepin-boot-kit
 PROG_DBUS=org.deepin.AtomicUpgrade1
+LANGUAGES_BOOT_KIT = $(basename $(notdir $(wildcard misc/deepin-boot-kit/po/*.po)))
+LANGUAGES_UPGRADE_MANAGER = $(basename $(notdir $(wildcard misc/deepin-upgrade-manager/po/*.po)))
 PREFIX=/usr
 VAR=/var/lib
 PWD=$(shell pwd)
@@ -25,7 +27,9 @@ $(info, $(GOPATH))
 $(warning, $(GOPATH))
 $(error, $(GOPATH))
 
+
 build: prepare
+	mkdir -p ${PWD}/out
 	@env GOPATH=${PWD}/${GOPATH_DIR}:${GOCODE}:${GOPATH} ls -al ${PWD}/${GOPATH_DIR}/src/deepin-upgrade-manager/*
 	@env GOPATH=${PWD}/${GOPATH_DIR}:${GOCODE}:${GOPATH} ls -al ${PWD}/${GOPATH_DIR}/src/deepin-upgrade-manager/cmd/deepin-upgrade-manager/*
 	@env GOPATH=${PWD}/${GOPATH_DIR}:${GOCODE}:${GOPATH} ls -al ${PWD}/${GOPATH_DIR}/src/deepin-upgrade-manager/cmd/deepin-boot-kit/*
@@ -60,10 +64,10 @@ install-upgrader:
 	@cp -f ${PWD}/cmd/initramfs-hook/${PROG_UPGRADER} ${DESTDIR}${PREFIX}/share/initramfs-tools/hooks/
 	@cp -f ${PWD}/cmd/initramfs-hook/ostree ${DESTDIR}${PREFIX}/share/initramfs-tools/hooks/
 
-	@mkdir -p ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom
-	@cp -f ${PWD}/cmd/initramfs-scripts/${PROG_UPGRADER} ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom/
-
 install-upgrader-tool:
+	install -d ${DESTDIR}${PREFIX}/share/locale
+	@cp -rv ${PWD}/out/locale/deepin-upgrade-manager/* ${DESTDIR}${PREFIX}/share/locale
+
 	@mkdir -p ${DESTDIR}${PREFIX}/bin
 	@cp -f ${PWD}/${PROG_UPGRADER_TOOL} ${DESTDIR}${PREFIX}/bin
 
@@ -71,6 +75,9 @@ install-upgrader-tool:
 	@cp -f ${PWD}/configs/upgrader/deepin-upgrade-manager-tool.desktop ${DESTDIR}/etc/xdg/autostart/deepin-upgrade-manager-tool.desktop
 
 install-bootkit:
+	install -d ${DESTDIR}${PREFIX}/share/locale
+	@cp -rv ${PWD}/out/locale/deepin-boot-kit/* ${DESTDIR}${PREFIX}/share/locale
+
 	@mkdir -p ${DESTDIR}/usr/share/${PROG_BOOTKIT}/
 	@cp -f ${PWD}/configs/bootkit/config.simple.json  ${DESTDIR}/usr/share/${PROG_BOOTKIT}/config.json
 
@@ -86,7 +93,26 @@ install-bootkit:
 	@mkdir -p ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom
 	@cp -f ${PWD}/cmd/initramfs-scripts/${PROG_BOOTKIT} ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom/
 
-install: install-upgrader install-upgrader-tool install-bootkit
+install: translate-bootkit translate-upgrade install-upgrader install-upgrader-tool install-bootkit
+
+out/locale/deepin-boot-kit/%/LC_MESSAGES/deepin-boot-kit.mo: misc/deepin-boot-kit/po/%.po
+	mkdir -p $(@D)
+	msgfmt -o $@ $<
+
+out/locale/deepin-upgrade-manager/%/LC_MESSAGES/deepin-upgrade-manager.mo: misc/deepin-upgrade-manager/po/%.po
+	mkdir -p $(@D)
+	msgfmt -o $@ $<
+
+translate-bootkit: $(addsuffix /LC_MESSAGES/deepin-boot-kit.mo, $(addprefix out/locale/deepin-boot-kit/, ${LANGUAGES_BOOT_KIT}))
+
+translate-upgrade: $(addsuffix /LC_MESSAGES/deepin-upgrade-manager.mo, $(addprefix out/locale/deepin-upgrade-manager/, ${LANGUAGES_UPGRADE_MANAGER}))
+
+check_code_quality:
+	go vet .
+
+pot:
+	xgettext -kTr --language=C -o misc/deepin-boot-kit/po/deepin-boot-kit.pot pkg/bootkit/bootkit.go
+	xgettext -kTr --language=C -o misc/deepin-upgrade-manager/po/deepin-upgrade-manager.pot pkg/upgrader/upgrader.go
 
 uninstall-upgrader:
 #ifeq ($(ARCH),sw_64)
@@ -119,5 +145,6 @@ clean:
 	@rm -rf ${PWD}/${PROG_UPGRADER}
 	@rm -rf ${PWD}/${PROG_UPGRADER_TOOL}
 	@rm -rf ${PWD}/${PROG_BOOTKIT}
+	@rm -rf ${PWD}/out
 
 rebuild: clean build

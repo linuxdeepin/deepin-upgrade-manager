@@ -58,6 +58,15 @@ func NewVersion() (string, error) {
 	return version, nil
 }
 
+func Update() error {
+	action := string("--action=") + "update"
+	err := util.ExecCommand(DEEPIN_BOOT_KIT, []string{action})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (infolist *BootInfoList) SetVersionName(version, display string) {
 	for _, v := range infolist.VersionList {
 		if v.Version == version {

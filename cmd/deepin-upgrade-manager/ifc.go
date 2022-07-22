@@ -68,8 +68,23 @@ func (m *Manager) ListVersion() ([]string, *dbus.Error) {
 	return vers, nil
 }
 
-func (m *Manager) ResetGrub() *dbus.Error {
-	m.upgrade.ResetGrub()
+func (m *Manager) Reset(locale string) *dbus.Error {
+	if !single.SetSingleInstance() {
+		return dbus.MakeFailedError(errors.New("process already exists"))
+	}
+	go func() {
+		m.DelayAutoQuit()
+		m.mu.Lock()
+		m.running = true
+		m.mu.Unlock()
+		defer func() {
+			m.mu.Lock()
+			m.running = false
+			m.mu.Unlock()
+			single.Remove()
+		}()
+		m.upgrade.ResetGrub(locale)
+	}()
 	return nil
 }
 

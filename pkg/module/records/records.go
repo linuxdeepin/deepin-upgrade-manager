@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sync"
 )
@@ -67,6 +68,7 @@ func LoadRecords(rootfs, recordsfile string) (*RecordsInfo, error) {
 	info.filename = path
 	info.CurrentState = _UNKNOW_STATE
 	info.TimeOut = 2
+	info.RollbackVersion = ""
 
 	defer info.save()
 	if util.IsExists(path) {
@@ -142,6 +144,8 @@ func (info *RecordsInfo) IsNeedReplaceFile() bool {
 
 func (info *RecordsInfo) SetRollbackInfo(version, rootdir string) {
 	info.RollbackVersion = version
+	defer info.save()
+
 	if len(rootdir) == 1 {
 		out, err := grub.TimeOut()
 		if err != nil && out != 0 {
@@ -151,7 +155,6 @@ func (info *RecordsInfo) SetRollbackInfo(version, rootdir string) {
 			info.TimeOut = 2 //default timeout
 		}
 	}
-	info.save()
 }
 
 func (info *RecordsInfo) SetReady() {
@@ -189,21 +192,24 @@ func (info *RecordsInfo) SetSuccessfully() {
 	info.save()
 }
 
-func (info *RecordsInfo) SetFailed() {
+func (info *RecordsInfo) SetFailed(version string) {
 	info.CurrentState = _ROLLBACK_FAILED
+	info.RollbackVersion = version
 	info.save()
 }
 
-func (info *RecordsInfo) ResetState() {
-	currTimeOut, _ := grub.TimeOut()
+func (info *RecordsInfo) ResetState(locale string) {
+	if len(info.RollbackVersion) != 0 {
+		currTimeOut, _ := grub.TimeOut()
 
-	if info.TimeOut != 0 && currTimeOut != info.TimeOut {
-		grub.SetTimeout(info.TimeOut)
-	} else {
-		util.ExecCommand("update-grub", []string{}) // need update
+		if info.TimeOut != 0 && currTimeOut != info.TimeOut {
+			grub.SetTimeout(info.TimeOut)
+		} else {
+			envLang := "LANG=" + locale
+			cmd := exec.Command("update-grub")
+			cmd.Env = append(cmd.Env, envLang)
+			_ = cmd.Start()
+		}
 	}
-
-	info.CurrentState = _UNKNOW_STATE
-	info.RollbackVersion = ""
-	info.save()
+	os.Remove(info.filename)
 }
