@@ -38,6 +38,7 @@ func (m *Manager) setupDBus() error {
 						Args: []introspect.Arg{
 							{Name: "op", Type: "i"},
 							{Name: "state", Type: "i"},
+							{Name: "target", Type: "s"},
 							{Name: "desc", Type: "s"},
 						},
 					},
