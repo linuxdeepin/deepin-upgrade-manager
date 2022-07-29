@@ -892,3 +892,29 @@ func GetBootKitText(text string) (string, error) {
 	}
 	return string(getTextOut), nil
 }
+
+func GetTimeZoomDiff() string {
+	timeDiff := "+8h"
+	out, err := ExecCommandWithOut("date", []string{"-R"})
+	if err != nil {
+		return timeDiff
+	}
+	arrLine := strings.Split(string(out), "\n")
+	if len(arrLine) < 1 {
+		return timeDiff
+	}
+	row := strings.Fields(arrLine[0])
+
+	if len(row) < 6 {
+		return timeDiff
+	}
+
+	if row[5][0] == '+' || row[5][0] == '-' {
+		if row[5][1] == '0' {
+			timeDiff = string(row[5][0]) + string(row[5][2]) + "h"
+		} else {
+			timeDiff = row[5][:3] + "h"
+		}
+	}
+	return timeDiff
+}

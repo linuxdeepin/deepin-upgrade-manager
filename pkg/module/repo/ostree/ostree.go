@@ -2,6 +2,7 @@ package ostree
 
 import (
 	"deepin-upgrade-manager/pkg/module/repo/branch"
+	"deepin-upgrade-manager/pkg/module/util"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -251,7 +252,7 @@ func (repo *OSTree) CommitTime(branchName string) (string, error) {
 			if err != nil {
 				return "", nil
 			}
-			duration, _ := time.ParseDuration("8h")
+			duration, _ := time.ParseDuration(util.GetTimeZoomDiff())
 			format := t.Add(duration).Format("2006-01-02 15:04:05")
 			return format, nil
 
