@@ -1,3 +1,11 @@
+deepin-upgrade-manager (1.0.6) unstable; urgency=medium
+
+  * Add rollback notify
+  * Add more than language adaptation
+  * Add the grub encryption
+
+ -- Chenghao Liu <liuchenghao@uniontech.com>  Mon, 1 Aug 2022 11:24:03 +0800
+
 deepin-upgrade-manager (1.0.5) unstable; urgency=medium
 
   * Fit deepin-boot-kit manager grub
