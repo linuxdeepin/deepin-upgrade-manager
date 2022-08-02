@@ -38,7 +38,7 @@ if read_fstab_entry /persistent; then
 	mountfs /persistent
 fi
 echo "will rollback to ${rootmnt}/persistent/osroot/snapshot/${back_version}"
-deepin-upgrade-manager --config="${rootmnt}/etc/deepin-upgrade-manager/config.json" --action=rollback --root="${rootmnt}"
+deepin-upgrade-manager --config="${rootmnt}/etc/deepin-upgrade-manager/config.json" --action=rollback --version="${back_version}" --root="${rootmnt}"
 if [ "${readonly}" = "n" ]; then
 	mount -o ro,remount ${rootmnt}
 	readonly=y

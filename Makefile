@@ -49,7 +49,7 @@ install-upgrader:
 	@cp -f ${PWD}/configs/upgrader/tool/atomic.json  ${DESTDIR}${VAR}/${PROG_BOOTKIT}/config/atomic.json
 
 	@mkdir -p ${DESTDIR}${VAR}/${PROG_UPGRADER}/scripts
-	@cp -f ${PWD}/cmd/initramfs-scripts/${PROG_UPGRADER} ${DESTDIR}${VAR}/${PROG_UPGRADER}/scripts/
+	@cp -f ${PWD}/configs/upgrader/${PROG_UPGRADER} ${DESTDIR}${VAR}/${PROG_UPGRADER}/scripts/
 
 	@mkdir -p ${DESTDIR}${PREFIX}/share/dbus-1/system.d/
 	@cp -f ${PWD}/configs/dbus/${PROG_DBUS}.conf  ${DESTDIR}${PREFIX}/share/dbus-1/system.d/
@@ -63,6 +63,9 @@ install-upgrader:
 	@mkdir -p ${DESTDIR}${PREFIX}/share/initramfs-tools/hooks
 	@cp -f ${PWD}/cmd/initramfs-hook/${PROG_UPGRADER} ${DESTDIR}${PREFIX}/share/initramfs-tools/hooks/
 	@cp -f ${PWD}/cmd/initramfs-hook/ostree ${DESTDIR}${PREFIX}/share/initramfs-tools/hooks/
+
+	@mkdir -p ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom
+	@cp -f ${PWD}/cmd/initramfs-scripts/${PROG_UPGRADER} ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom/
 
 install-upgrader-tool:
 	install -d ${DESTDIR}${PREFIX}/share/locale

@@ -3,6 +3,7 @@ package records
 import (
 	"deepin-upgrade-manager/pkg/logger"
 	"deepin-upgrade-manager/pkg/module/grub"
+	"deepin-upgrade-manager/pkg/module/login"
 	"deepin-upgrade-manager/pkg/module/util"
 	"encoding/json"
 	"io"
@@ -204,11 +205,18 @@ func (info *RecordsInfo) ResetState(locale string) {
 
 		if info.TimeOut != 0 && currTimeOut != info.TimeOut {
 			grub.SetTimeout(info.TimeOut)
+		}
+		// Compatible with many languages
+		fd, err := login.Inhibit("shutdown", "org.deepin.AtomicUpgrade1",
+			"Updating the grub, please shut down or reboot later.")
+		envLang := "LANG=" + locale
+		cmd := exec.Command("update-grub")
+		cmd.Env = append(cmd.Env, envLang)
+		_ = cmd.Start()
+		if err != nil {
+			logger.Warning(err)
 		} else {
-			envLang := "LANG=" + locale
-			cmd := exec.Command("update-grub")
-			cmd.Env = append(cmd.Env, envLang)
-			_ = cmd.Start()
+			login.Close(fd)
 		}
 	}
 	os.Remove(info.filename)

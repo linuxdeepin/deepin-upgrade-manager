@@ -9,7 +9,6 @@ import (
 	"deepin-upgrade-manager/pkg/module/generator"
 	"deepin-upgrade-manager/pkg/module/grub"
 	"deepin-upgrade-manager/pkg/module/langselector"
-	"deepin-upgrade-manager/pkg/module/login"
 	"deepin-upgrade-manager/pkg/module/mountinfo"
 	"deepin-upgrade-manager/pkg/module/mountpoint"
 	"deepin-upgrade-manager/pkg/module/notify"
@@ -203,12 +202,14 @@ func (c *Upgrader) Commit(newVersion, subject string, useSysData bool,
 		if err != nil {
 			logger.Error("failed auto cleanup repo, err:", err)
 		}
+	} else {
+		exitCode, err = c.UpdateGrub()
+		if err != nil {
+			exitCode = _STATE_TY_FAILED_UPDATE_GRUB
+			goto failure
+		}
 	}
-	exitCode, err = c.UpdateGrub()
-	if err != nil {
-		exitCode = _STATE_TY_FAILED_UPDATE_GRUB
-		goto failure
-	}
+
 	if evHandler != nil {
 		evHandler(int32(_OP_TY_COMMIT), int32(_STATE_TY_SUCCESS), newVersion,
 			fmt.Sprintf("%s: %s", _OP_TY_COMMIT.String(), _STATE_TY_SUCCESS.String()))
@@ -966,15 +967,7 @@ func (c *Upgrader) Subject(version string) (string, error) {
 }
 
 func (c *Upgrader) ResetGrub(locale string) {
-	fd, err := login.Inhibit("shutdown", "org.deepin.AtomicUpgrade1",
-		"Updating the grub, please shut down or reboot later.")
 	c.recordsInfo.ResetState(locale)
-
-	if err != nil {
-		logger.Warning(err)
-	} else {
-		login.Close(fd)
-	}
 }
 
 func (c *Upgrader) SendSystemNotice() error {
