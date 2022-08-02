@@ -3,6 +3,7 @@ package mountinfo
 import (
 	"bufio"
 	"deepin-upgrade-manager/pkg/logger"
+	"deepin-upgrade-manager/pkg/module/dirinfo"
 	"os"
 	"strings"
 )
@@ -40,6 +41,27 @@ func (infos MountInfoList) Match(dir string) *MountInfo {
 		}
 	}
 	return nil
+}
+
+func (infos MountInfoList) MaxPartition(dirs []string) *MountInfo {
+	var max uint64
+	var dirPath string
+	for _, info := range infos {
+		for _, dir := range dirs {
+			if info.MountPoint == dir {
+				part, err := dirinfo.GetPartitionFreeSize(info.MountPoint)
+				if err != nil {
+					logger.Warningf("failed get par:%s size, err: %v", dir, err)
+					continue
+				}
+				if max < part {
+					max = part
+					dirPath = info.MountPoint
+				}
+			}
+		}
+	}
+	return infos.Match(dirPath)
 }
 
 func isExist(info MountInfo, list MountInfoList) bool {

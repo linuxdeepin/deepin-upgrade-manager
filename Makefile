@@ -96,6 +96,8 @@ install-bootkit:
 	@mkdir -p ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom
 	@cp -f ${PWD}/cmd/initramfs-scripts/${PROG_BOOTKIT} ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom/
 
+	@mkdir -p ${DESTDIR}${VAR}/${PROG_BOOTKIT}
+
 install: translate-bootkit translate-upgrade install-upgrader install-upgrader-tool install-bootkit
 
 out/locale/deepin-boot-kit/%/LC_MESSAGES/deepin-boot-kit.mo: misc/deepin-boot-kit/po/%.po
@@ -140,6 +142,7 @@ uninstall-bootkit:
 	@rm -f ${DESTDIR}/etc/grub.d/15_deepin-boot-kit
 	@rm -f ${DESTDIR}${PREFIX}/share/initramfs-tools/hooks/${PROG_BOOTKIT}
 	@rm -f ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom/${PROG_BOOTKIT}
+	@rm -f ${DESTDIR}${VAR}/${PROG_BOOTKIT}
 
 uninstall: uninstall-upgrader uninstall-upgrader-tool uninstall-bootkit
 

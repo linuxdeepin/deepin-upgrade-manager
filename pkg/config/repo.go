@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"os"
+	"strings"
 )
 
 type RepoConfig struct {
-	Repo        string `json:"repo"`
-	SnapshotDir string `json:"snapshot_dir"`
-	StageDir    string `json:"stage_dir"`
+	RepoMountPoint string `json:"repo_mount_point"`
+	Repo           string `json:"repo"`
+	SnapshotDir    string `json:"snapshot_dir"`
+	StageDir       string `json:"stage_dir"`
 
 	SubscribeList []string `json:"subscribe_list"`
 	FilterList    []string `json:"filter_list"`
@@ -68,6 +70,15 @@ func (c *Config) Save() error {
 	}
 	_, err = util.Move(c.filename, tmpFile, true)
 	return err
+}
+
+func (c *Config) ChangeRepoMountPoint(mountpoint string) {
+	for _, v := range c.RepoList {
+		v.Repo = strings.Replace(v.Repo, v.RepoMountPoint, mountpoint, 1)
+		v.SnapshotDir = strings.Replace(v.SnapshotDir, v.RepoMountPoint, mountpoint, 1)
+		v.StageDir = strings.Replace(v.StageDir, v.RepoMountPoint, mountpoint, 1)
+		v.RepoMountPoint = mountpoint
+	}
 }
 
 func LoadConfig(filename string) (*Config, error) {

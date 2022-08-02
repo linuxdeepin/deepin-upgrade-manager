@@ -600,6 +600,7 @@ func CopyFile2(src, dst string, sfi os.FileInfo, enableHardlink bool) error {
 	if err != nil || !enableHardlink {
 		err = doCopy(src, dst, sfi)
 	}
+
 	return err
 }
 

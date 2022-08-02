@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"time"
 )
 
 type RecoredState int
@@ -63,7 +64,7 @@ func readFile(recordsfile string, info interface{}) error {
 	return json.Unmarshal(content, info)
 }
 
-func LoadRecords(rootfs, recordsfile string) (*RecordsInfo, error) {
+func LoadRecords(rootfs, recordsfile string) *RecordsInfo {
 	var info RecordsInfo
 	path := filepath.Join(rootfs, recordsfile)
 	info.filename = path
@@ -81,7 +82,7 @@ func LoadRecords(rootfs, recordsfile string) (*RecordsInfo, error) {
 		dir := filepath.Dir(path)
 		_ = os.MkdirAll(dir, 0644)
 	}
-	return &info, nil
+	return &info
 }
 
 func (info *RecordsInfo) save() error {
@@ -199,12 +200,23 @@ func (info *RecordsInfo) SetFailed(version string) {
 	info.save()
 }
 
+func (info *RecordsInfo) Remove() {
+	os.Remove(info.filename)
+	logger.Debugf("remove records rollback state file: %s", info.filename)
+}
+
 func (info *RecordsInfo) ResetState(locale string) {
 	if len(info.RollbackVersion) != 0 {
 		currTimeOut, _ := grub.TimeOut()
 
 		if info.TimeOut != 0 && currTimeOut != info.TimeOut {
-			grub.SetTimeout(info.TimeOut)
+			err := grub.SetTimeout(info.TimeOut)
+			if err != nil {
+				logger.Warning("failed set the rollback waiting time")
+			} else {
+				time.Sleep(1 * time.Second) // wait for grub set out time
+				grub.Join()
+			}
 		}
 		// Compatible with many languages
 		fd, err := login.Inhibit("shutdown", "org.deepin.AtomicUpgrade1",
@@ -219,5 +231,4 @@ func (info *RecordsInfo) ResetState(locale string) {
 			login.Close(fd)
 		}
 	}
-	os.Remove(info.filename)
 }

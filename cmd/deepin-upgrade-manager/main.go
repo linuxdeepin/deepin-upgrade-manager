@@ -48,11 +48,6 @@ func main() {
 		fmt.Println("load config wrong:", err)
 		os.Exit(-1)
 	}
-	err = conf.Prepare()
-	if err != nil {
-		fmt.Println("config prepare wrong:", err)
-		os.Exit(-1)
-	}
 	if len(*_rootDir) == 1 {
 		logger.NewLogger("deepin-upgrade-manager", false)
 	} else {

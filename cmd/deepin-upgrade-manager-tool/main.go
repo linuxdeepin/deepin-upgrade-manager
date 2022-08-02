@@ -17,13 +17,14 @@ var (
 
 func main() {
 	flag.Parse()
-	m, err := upgrader.NewUpgraderTool()
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(-1)
-	}
+	m := upgrader.NewUpgraderTool()
 	switch *_action {
 	case _ACTION_NOTIFY:
+		err := m.LoadRollbackRecords(false)
+		if err != nil {
+			fmt.Printf("%v", err)
+			os.Exit(-1)
+		}
 		err = m.SendSystemNotice()
 		if err != nil {
 			fmt.Printf("%v", err)

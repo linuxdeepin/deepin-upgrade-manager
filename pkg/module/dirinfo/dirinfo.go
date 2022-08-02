@@ -55,6 +55,9 @@ func GetDirSize(path string) int64 {
 }
 
 func GetPartitionFreeSize(dirPath string) (uint64, error) {
+	if !util.IsExists(dirPath) {
+		return 0, errors.New("dir isn't exist")
+	}
 	out, err := util.ExecCommandWithOut("df", []string{dirPath})
 	arrLine := strings.Split(string(out), "\n")
 	if len(arrLine) < 2 {

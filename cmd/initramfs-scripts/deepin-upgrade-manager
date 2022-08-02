@@ -16,30 +16,31 @@ esac
 . /scripts/local
 . /scripts/nfs
 
-
-for x in $(cat /proc/cmdline); do
-	case $x in
-	# The following lines blocked for security reason
-	back_version=*)
-		back_version=${x#back_version=}
-		;;
-	esac
-done
+atomic_upgrade_config=${rootmnt}/etc/deepin-upgrade-manager/config.json
+atomic_upgrade_records=${rootmnt}/etc/deepin-upgrade-manager/state.records
+repo_records_point_key=repo_mount_point
 
 
-local_premount_used=yes
-if [ "${readonly}" = "y" ]; then
-	mount -o rw,remount ${rootmnt}
-	readonly=n
+repo_mount_point=
+if test -e ${atomic_upgrade_config}; then
+	repo_mount_point=$(echo "$(cat ${atomic_upgrade_config})" | awk -F "[{,:}]" '{for(i=1;i<=NF;i++){if($i~"'${repo_records_point_key}'"){print $(i+1)}}}' | sed 's/\"//g')
 fi
 
-if read_fstab_entry /persistent; then
-	log_begin_msg "Mounting /persistent file system"
-	mountfs /persistent
+if [[ -n ${repo_mount_point} ]] && test -e ${atomic_upgrade_records};then
+	if [ "${readonly}" = "y" ]; then
+		mount -o rw,remount ${rootmnt}
+		readonly=n
+	fi
+
+	if read_fstab_entry ${repo_mount_point}; then
+		log_begin_msg "Mounting ${repo_mount_point} file system"
+		mountfs ${repo_mount_point}
+	fi
+	echo "will rollback to ${rootmnt}${repo_mount_point}/osroot/"
+	deepin-upgrade-manager --config="${atomic_upgrade_config}" --action=rollback --root="${rootmnt}"
+	if [ "${readonly}" = "n" ]; then
+		mount -o ro,remount ${rootmnt}
+		readonly=y
+	fi
 fi
-echo "will rollback to ${rootmnt}/persistent/osroot/snapshot/${back_version}"
-deepin-upgrade-manager --config="${rootmnt}/etc/deepin-upgrade-manager/config.json" --action=rollback --root="${rootmnt}"
-if [ "${readonly}" = "n" ]; then
-	mount -o ro,remount ${rootmnt}
-	readonly=y
-fi
+

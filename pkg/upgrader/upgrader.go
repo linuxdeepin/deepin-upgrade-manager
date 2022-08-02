@@ -107,15 +107,9 @@ type Upgrader struct {
 	rootMP string
 }
 
-func NewUpgraderTool() (*Upgrader, error) {
-	recordsInfo, err := records.LoadRecords("/", SelfRecordStatePath)
-	if err != nil {
-		return nil, err
-	}
-	info := Upgrader{
-		recordsInfo: recordsInfo,
-	}
-	return &info, nil
+func NewUpgraderTool() *Upgrader {
+	info := Upgrader{}
+	return &info
 }
 
 func NewUpgrader(conf *config.Config,
@@ -124,16 +118,11 @@ func NewUpgrader(conf *config.Config,
 	if err != nil {
 		return nil, err
 	}
-	recordsInfo, err := records.LoadRecords(rootMP, SelfRecordStatePath)
-	if err != nil {
-		return nil, err
-	}
 	info := Upgrader{
-		conf:        conf,
-		mountInfos:  mountInfos,
-		repoSet:     make(map[string]repo.Repository),
-		rootMP:      rootMP,
-		recordsInfo: recordsInfo,
+		conf:       conf,
+		mountInfos: mountInfos,
+		repoSet:    make(map[string]repo.Repository),
+		rootMP:     rootMP,
 	}
 	for _, v := range conf.RepoList {
 		handler, err := repo.NewRepo(repo.REPO_TY_OSTREE, filepath.Join(rootMP, v.Repo))
@@ -145,8 +134,34 @@ func NewUpgrader(conf *config.Config,
 	return &info, nil
 }
 
+func (c *Upgrader) ResetRepo() {
+	for key := range c.repoSet {
+		delete(c.repoSet, key)
+	}
+	for _, v := range c.conf.RepoList {
+		handler, err := repo.NewRepo(repo.REPO_TY_OSTREE, filepath.Join(c.rootMP, v.Repo))
+		if err != nil {
+			logger.Warning("failed reset repo, err:", err)
+		}
+		c.repoSet[v.Repo] = handler
+	}
+}
+
 func (c *Upgrader) Init() (int, error) {
 	exitCode := _STATE_TY_SUCCESS
+
+	info := c.mountInfos.MaxPartition([]string{"/data", "/persistent"})
+	if nil != info {
+		mountPoint := strings.TrimSpace(info.MountPoint)
+		c.conf.ChangeRepoMountPoint(mountPoint)
+		c.ResetRepo()
+		logger.Debugf("changed the repo mount point to <%s>", mountPoint)
+	}
+	err := c.conf.Prepare()
+	if err != nil {
+		exitCode = _STATE_TY_FAILED_OSTREE_INIT
+		return int(exitCode), errors.New("failed to initialize config")
+	}
 	if c.IsExistRepo() {
 		exitCode = _STATE_TY_FAILED_OSTREE_INIT
 		return int(exitCode), errors.New("failed to initialize because repository exists")
@@ -172,6 +187,7 @@ func (c *Upgrader) SaveActiveVersion(version string) {
 func (c *Upgrader) Commit(newVersion, subject string, useSysData bool,
 	evHandler func(op, state int32, target, desc string)) (excode int, err error) {
 	exitCode := _STATE_TY_SUCCESS
+	var isClean bool
 	if len(newVersion) == 0 {
 		newVersion, err = bootkitinfo.NewVersion()
 		if err != nil {
@@ -198,11 +214,14 @@ func (c *Upgrader) Commit(newVersion, subject string, useSysData bool,
 
 	// automatically clear redundant versions
 	if c.IsAutoClean() {
-		err = c.RepoAutoCleanup()
+		isClean, err = c.RepoAutoCleanup()
 		if err != nil {
 			logger.Error("failed auto cleanup repo, err:", err)
 		}
-	} else {
+
+	}
+	// prevent another update grub
+	if !isClean {
 		exitCode, err = c.UpdateGrub()
 		if err != nil {
 			exitCode = _STATE_TY_FAILED_UPDATE_GRUB
@@ -229,6 +248,7 @@ func (c *Upgrader) IsExistRepo() bool {
 			logger.Debugf("%s does not exist", v.Repo)
 			return false
 		}
+
 		handler := c.repoSet[v.Repo]
 		list, err := handler.List()
 		if err != nil {
@@ -370,6 +390,7 @@ func (c *Upgrader) getRollbackInfo(version, rootdir string) (string, bool, error
 		}
 		c.recordsInfo.SetReady()
 		c.recordsInfo.SetRollbackInfo(version, rootdir)
+		logger.Debugf("set rollback info, version:%s, repo mount point:%s", version, c.conf.RepoList[0].RepoMountPoint)
 		return version, isCanRollback, nil
 	}
 	if len(version) == 0 && len(c.rootMP) != 1 && c.recordsInfo.IsReadyRollback() &&
@@ -384,6 +405,7 @@ func (c *Upgrader) getRollbackInfo(version, rootdir string) (string, bool, error
 func (c *Upgrader) Rollback(version string,
 	evHandler func(op, state int32, target, desc string)) (excode int, err error) {
 	exitCode := _STATE_TY_SUCCESS
+	c.LoadRollbackRecords(true)
 	backVersion, isCanRollback, err := c.getRollbackInfo(version, c.rootMP)
 	if err != nil {
 		exitCode = _STATE_TY_FAILED_NO_REPO
@@ -820,20 +842,20 @@ func (c *Upgrader) updataLoaclMount(snapDir string) (mountpoint.MountPointList, 
 	return mountedPointList, nil
 }
 
-func (c *Upgrader) RepoAutoCleanup() error {
+func (c *Upgrader) RepoAutoCleanup() (bool, error) {
 	handler, err := repo.NewRepo(repo.REPO_TY_OSTREE,
 		filepath.Join(c.rootMP, c.conf.RepoList[0].Repo))
 	if err != nil {
-		return err
+		return false, err
 	}
 	maxVersion := int(c.conf.MaxVersionRetention)
 	list, err := handler.List()
 	if err != nil {
-		return err
+		return false, err
 	}
 	if len(list) <= maxVersion {
 		logger.Infof("current version is less than %d, no need for auto cleanup", maxVersion)
-		return nil
+		return false, nil
 	}
 	logger.Infof("current version is more than %d, need for cleanup repo", maxVersion)
 
@@ -850,7 +872,7 @@ func (c *Upgrader) RepoAutoCleanup() error {
 			break
 		}
 	}
-	return nil
+	return true, nil
 }
 
 func (c *Upgrader) Delete(version string,
@@ -967,7 +989,13 @@ func (c *Upgrader) Subject(version string) (string, error) {
 }
 
 func (c *Upgrader) ResetGrub(locale string) {
+	err := c.LoadRollbackRecords(false)
+	if err != nil {
+		logger.Warning(err)
+		return
+	}
 	c.recordsInfo.ResetState(locale)
+	c.recordsInfo.Remove()
 }
 
 func (c *Upgrader) SendSystemNotice() error {
@@ -1008,5 +1036,18 @@ func (c *Upgrader) SendSystemNotice() error {
 		lang, _ := langselector.GetCurrentLocale()
 		return grubServiceObj.Call(metho, 0, lang).Store()
 	}
+	return nil
+}
+
+func (c *Upgrader) LoadRollbackRecords(needcreated bool) error {
+	var recordsInfo *records.RecordsInfo
+
+	// save rollback records state
+	if needcreated || util.IsExists(filepath.Join(c.rootMP, SelfRecordStatePath)) {
+		recordsInfo = records.LoadRecords(c.rootMP, SelfRecordStatePath)
+	} else {
+		return errors.New("failed load rollback records, the file does not exist")
+	}
+	c.recordsInfo = recordsInfo
 	return nil
 }

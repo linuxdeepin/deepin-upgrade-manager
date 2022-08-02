@@ -8,6 +8,7 @@
   "max_version_retention": 5,
   "repo_list": [
     {
+      "repo_mount_point":"/persistent",
       "repo": "/persistent/osroot/repo",
       "stage_dir": "/persistent/osroot/cache",
       "snapshot_dir": "/persistent/osroot/snapshot",
