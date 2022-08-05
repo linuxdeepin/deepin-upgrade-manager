@@ -93,7 +93,9 @@ func Load(versionList []string) BootInfoList {
 		if err != nil {
 			continue
 		}
-		var vmlinux, initrd string
+		var vmlinuxPath, vmlinux string
+		var initrdPaths []string
+
 		for _, fi := range fiList {
 			if fi.IsDir() {
 				continue
@@ -101,19 +103,28 @@ func Load(versionList []string) BootInfoList {
 			if strings.HasPrefix(fi.Name(), "vmlinuz-") ||
 				strings.HasPrefix(fi.Name(), "kernel-") ||
 				strings.HasPrefix(fi.Name(), "vmlinux-") {
-				vmlinux = filepath.Join(bootDir, fi.Name())
+				vmlinuxPath = filepath.Join(bootDir, fi.Name())
+				vmlinux = fi.Name()
 			}
 			if strings.HasPrefix(fi.Name(), "initrd.img-") {
-				initrd = filepath.Join(bootDir, fi.Name())
+				initrdPaths = append(initrdPaths, filepath.Join(bootDir, fi.Name()))
 			}
 		}
-		if len(vmlinux) != 0 && len(initrd) != 0 {
+		if len(vmlinuxPath) != 0 && len(initrdPaths) != 0 {
+			index := strings.IndexRune(vmlinux, '-')
+			var initrdPath string
+			for _, v := range initrdPaths {
+				if strings.HasSuffix(v, vmlinux[index:]) {
+					initrdPath = v
+					break
+				}
+			}
 			if isAcrossPart {
-				info.Initrd = strings.TrimPrefix(initrd, "/boot")
-				info.Kernel = strings.TrimPrefix(vmlinux, "/boot")
+				info.Initrd = strings.TrimPrefix(initrdPath, "/boot")
+				info.Kernel = strings.TrimPrefix(vmlinuxPath, "/boot")
 			} else {
-				info.Initrd = initrd
-				info.Kernel = vmlinux
+				info.Initrd = initrdPath
+				info.Kernel = vmlinuxPath
 			}
 			info.Version = v
 			info.Scheme = SCHEME
