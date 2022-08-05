@@ -187,3 +187,11 @@ func (m *Manager) QuerySubject(versions []string) ([]string, *dbus.Error) {
 	}
 	return subjects, nil
 }
+
+func (m *Manager) GetGrubTitle(versions string) (string, *dbus.Error) {
+	if len(versions) == 0 {
+		logger.Error("must special version")
+		return "", dbus.MakeFailedError(errors.New("must special version"))
+	}
+	return m.upgrade.GrubTitle(versions), nil
+}

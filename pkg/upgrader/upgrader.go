@@ -291,6 +291,29 @@ func (c *Upgrader) EnableBoot(version string) (stateType, error) {
 	return exitCode, nil
 }
 
+func (c Upgrader) GrubTitle(version string) string {
+	var commitName string
+
+	systemName, err := util.GetOSInfo("SystemName")
+	if err != nil {
+		logger.Warning("failed get system name, err:", err)
+	}
+	MinorVersion, err := util.GetOSInfo("MinorVersion")
+	if err != nil {
+		logger.Warning("failed get minor version, err:", err)
+	}
+	handler, _ := repo.NewRepo(repo.REPO_TY_OSTREE,
+		filepath.Join(c.rootMP, c.conf.RepoList[0].Repo))
+	time, err := handler.CommitTime(version)
+	if err != nil {
+		commitName = fmt.Sprintf("Rollback to %s", version)
+		logger.Warning("failed get commit time, err:", err)
+	} else {
+		commitName = systemName + " " + MinorVersion + " " + "(" + strings.ReplaceAll(time, "-", "/") + ")"
+	}
+	return commitName
+}
+
 func (c *Upgrader) EnableBootList() (string, int, error) {
 	var exitCode int
 	list, exitCode, err := c.ListVersion()
@@ -309,23 +332,10 @@ func (c *Upgrader) EnableBootList() (string, int, error) {
 		c.EnableBoot(v)
 		showList = append(showList, v)
 	}
-	handler, _ := repo.NewRepo(repo.REPO_TY_OSTREE,
-		filepath.Join(c.rootMP, c.conf.RepoList[0].Repo))
-	systemName, err := util.GetOSInfo("SystemName")
-	if err != nil {
-		logger.Warning("failed get system name, err:", err)
-	}
-	MinorVersion, err := util.GetOSInfo("MinorVersion")
-	if err != nil {
-		logger.Warning("failed get minor version, err:", err)
-	}
+
 	listInfo := bootkitinfo.Load(showList)
 	for _, v := range showList {
-		time, err := handler.CommitTime(v)
-		commitName := systemName + " " + MinorVersion + " " + "(" + strings.ReplaceAll(time, "-", "/") + ")"
-		if err != nil {
-			logger.Warning("failed get commit time, err:", err)
-		}
+		commitName := c.GrubTitle(v)
 		listInfo.SetVersionName(v, commitName)
 	}
 
@@ -999,10 +1009,24 @@ func (c *Upgrader) ResetGrub(locale string) {
 }
 
 func (c *Upgrader) SendSystemNotice() error {
-	var backMsg string
+	var backMsg, grubTitle string
+	const atomicUpgradeDest = "org.deepin.AtomicUpgrade1"
+	const atomicUpgradePath = "/org/deepin/AtomicUpgrade1"
+
+	sysBus, err := dbus.SystemBus()
+	if err != nil {
+		return err
+	}
+	grubServiceObj := sysBus.Object(atomicUpgradeDest,
+		atomicUpgradePath)
 
 	if len(c.recordsInfo.RollbackVersion) == 0 {
 		return errors.New("the rollback version is empty")
+	} else {
+		metho := atomicUpgradeDest + ".GetGrubTitle"
+		var ret dbus.Variant
+		grubServiceObj.Call(metho, 0, c.recordsInfo.RollbackVersion).Store(&ret)
+		grubTitle = ret.Value().(string)
 	}
 
 	if c.recordsInfo.IsSucceeded() {
@@ -1010,7 +1034,8 @@ func (c *Upgrader) SendSystemNotice() error {
 		if err != nil {
 			logger.Warningf("run gettext error: %v", err)
 		}
-		backMsg = fmt.Sprintf(text, c.recordsInfo.RollbackVersion)
+		msg := fmt.Sprintf(" %s", grubTitle)
+		backMsg = fmt.Sprintf(text, msg)
 	}
 
 	if c.recordsInfo.IsFailed() {
@@ -1018,7 +1043,8 @@ func (c *Upgrader) SendSystemNotice() error {
 		if err != nil {
 			logger.Warningf("run gettext error: %v", err)
 		}
-		backMsg = fmt.Sprintf(text, c.recordsInfo.RollbackVersion)
+		msg := fmt.Sprintf(" %s", grubTitle)
+		backMsg = fmt.Sprintf(text, msg)
 	}
 	if len(backMsg) != 0 {
 		time.Sleep(5 * time.Second) // wait for osd dbus
@@ -1026,13 +1052,7 @@ func (c *Upgrader) SendSystemNotice() error {
 		if err != nil {
 			logger.Warning("failed send system notice, err:", err)
 		}
-		sysBus, err := dbus.SystemBus()
-		if err != nil {
-			return err
-		}
-		grubServiceObj := sysBus.Object("org.deepin.AtomicUpgrade1",
-			"/org/deepin/AtomicUpgrade1")
-		metho := "org.deepin.AtomicUpgrade1.Reset"
+		metho := atomicUpgradeDest + ".Reset"
 		lang, _ := langselector.GetCurrentLocale()
 		return grubServiceObj.Call(metho, 0, lang).Store()
 	}
