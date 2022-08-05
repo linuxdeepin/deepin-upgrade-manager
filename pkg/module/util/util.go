@@ -99,7 +99,7 @@ func MakeRandomString(num int) string {
 	return string(data)
 }
 
-func execC(action string, args []string) (io.ReadCloser, error) {
+func execC(action string, args []string) (io.ReadCloser, *exec.Cmd, error) {
 	var cmd *exec.Cmd
 	if len(args) != 0 {
 		cmd = exec.Command(action, args...)
@@ -109,18 +109,18 @@ func execC(action string, args []string) (io.ReadCloser, error) {
 	stdout, err := cmd.StdoutPipe()
 	cmd.Stderr = cmd.Stdout
 	if err != nil {
-		return nil, err
+		return nil, cmd, err
 	}
 	err = cmd.Start()
 	if err != nil {
-		return nil, err
+		return nil, cmd, err
 	}
-	return stdout, nil
+	return stdout, cmd, nil
 }
 
 func ExecCommandWithOut(action string, args []string) ([]byte, error) {
 	var out []byte
-	stdout, err := execC(action, args)
+	stdout, cmd, err := execC(action, args)
 	if err != nil {
 		return out, err
 	}
@@ -141,11 +141,12 @@ func ExecCommandWithOut(action string, args []string) ([]byte, error) {
 			str_buf = append(str_buf, v)
 		}
 	}
+	cmd.Wait()
 	return str_buf, nil
 }
 
 func ExecCommand(action string, args []string) error {
-	stdout, err := execC(action, args)
+	stdout, cmd, err := execC(action, args)
 	if err != nil {
 		return err
 	}
@@ -156,6 +157,7 @@ func ExecCommand(action string, args []string) error {
 			break
 		}
 	}
+	cmd.Wait()
 	return nil
 }
 
