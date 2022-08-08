@@ -1,3 +1,10 @@
+deepin-upgrade-manager (1.0.7) unstable; urgency=medium
+
+  * Add adapter v20 system
+  * Fix failed rollback in dbus and cmd
+
+ -- Chenghao Liu <liuchenghao@uniontech.com>  Mon, 8 Aug 2022 13:24:03 +0800
+
 deepin-upgrade-manager (1.0.6) unstable; urgency=medium
 
   * Add rollback notify
