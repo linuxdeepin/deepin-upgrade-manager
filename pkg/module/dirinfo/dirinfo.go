@@ -75,6 +75,27 @@ func GetPartitionFreeSize(dirPath string) (uint64, error) {
 	return uint64(size * 1024), nil
 }
 
+func GetPartitionTotalSize(dirPath string) (uint64, error) {
+	if !util.IsExists(dirPath) {
+		return 0, errors.New("dir isn't exist")
+	}
+	out, err := util.ExecCommandWithOut("df", []string{dirPath})
+	arrLine := strings.Split(string(out), "\n")
+	if len(arrLine) < 2 {
+		return 0, errors.New("failed get dir parttiton")
+	}
+	arrCmd := strings.Fields(arrLine[1])
+	if err != nil {
+		return 0, err
+	}
+	partition := strings.TrimSpace(arrCmd[1])
+	size, err := strconv.Atoi(partition)
+	if err != nil {
+		return 0, err
+	}
+	return uint64(size * 1024), nil
+}
+
 func GetDirPartition(dirPath string) (string, error) {
 	out, err := util.ExecCommandWithOut("df", []string{dirPath})
 	arrLine := strings.Split(string(out), "\n")

@@ -41,8 +41,10 @@ if [[ -n ${repo_mount_point} ]];then
 	fi
 
 	if read_fstab_entry ${repo_mount_point}; then
-		log_begin_msg "Mounting ${repo_mount_point} file system"
-		mountfs ${repo_mount_point}
+		if [ ${repo_mount_point} != "/" ]; then
+			mountfs ${repo_mount_point}
+			log_begin_msg "Mounting ${repo_mount_point} file system"
+		fi
 	fi
 	echo "will rollback to ${rootmnt}${repo_mount_point}/osroot/snapshot/${back_version}"
 	deepin-upgrade-manager --config="${atomic_upgrade_config}" --action=rollback --version="${back_version}" --root="${rootmnt}"

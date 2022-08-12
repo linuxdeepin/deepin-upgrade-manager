@@ -3,6 +3,7 @@ package fstabinfo
 import (
 	"bufio"
 	"deepin-upgrade-manager/pkg/logger"
+	"deepin-upgrade-manager/pkg/module/dirinfo"
 	"deepin-upgrade-manager/pkg/module/diskinfo"
 	"fmt"
 	"os"
@@ -19,6 +20,23 @@ type FsInfo struct {
 }
 
 type FsInfoList []*FsInfo
+
+func (fs FsInfoList) MaxFreePartitionPoint() string {
+	var maxFree uint64
+	var point string
+	for _, v := range fs {
+		free, err := dirinfo.GetPartitionFreeSize(v.DestPoint)
+		if err != nil {
+			logger.Warningf("failed get par:%s size, err: %v", v.DestPoint, err)
+			continue
+		}
+		if maxFree < free {
+			maxFree = free
+			point = v.DestPoint
+		}
+	}
+	return point
+}
 
 func getPartiton(spec string, dsInfos diskinfo.DiskIDList) (string, error) {
 	bits := strings.Split(spec, "=")

@@ -43,7 +43,7 @@ func (infos MountInfoList) Match(dir string) *MountInfo {
 	return nil
 }
 
-func (infos MountInfoList) MaxPartition(dirs []string) *MountInfo {
+func (infos MountInfoList) MaxPartition(dirs []string) string {
 	var max uint64
 	var dirPath string
 	for _, info := range infos {
@@ -61,7 +61,7 @@ func (infos MountInfoList) MaxPartition(dirs []string) *MountInfo {
 			}
 		}
 	}
-	return infos.Match(dirPath)
+	return infos.Match(dirPath).MountPoint
 }
 
 func isExist(info MountInfo, list MountInfoList) bool {

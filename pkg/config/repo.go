@@ -74,9 +74,28 @@ func (c *Config) Save() error {
 
 func (c *Config) ChangeRepoMountPoint(mountpoint string) {
 	for _, v := range c.RepoList {
-		v.Repo = strings.Replace(v.Repo, v.RepoMountPoint, mountpoint, 1)
-		v.SnapshotDir = strings.Replace(v.SnapshotDir, v.RepoMountPoint, mountpoint, 1)
-		v.StageDir = strings.Replace(v.StageDir, v.RepoMountPoint, mountpoint, 1)
+		if v.RepoMountPoint == mountpoint {
+			continue
+		}
+		var isExist bool
+		for _, v := range v.SubscribeList {
+			if strings.HasPrefix(mountpoint, v) {
+				isExist = true
+			}
+		}
+
+		if mountpoint == "/" {
+			v.Repo = strings.Replace(v.Repo, v.RepoMountPoint, "", 1)
+			v.SnapshotDir = strings.Replace(v.SnapshotDir, v.RepoMountPoint, "", 1)
+			v.StageDir = strings.Replace(v.StageDir, v.RepoMountPoint, "", 1)
+		} else {
+			v.Repo = strings.Replace(v.Repo, v.RepoMountPoint, mountpoint, 1)
+			v.SnapshotDir = strings.Replace(v.SnapshotDir, v.RepoMountPoint, mountpoint, 1)
+			v.StageDir = strings.Replace(v.StageDir, v.RepoMountPoint, mountpoint, 1)
+		}
+		if isExist {
+			v.FilterList = append(v.FilterList, v.Repo, v.SnapshotDir, v.StageDir)
+		}
 		v.RepoMountPoint = mountpoint
 	}
 }

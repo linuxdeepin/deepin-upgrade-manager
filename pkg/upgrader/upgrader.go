@@ -39,6 +39,8 @@ type (
 const (
 	SelfMountPath       = "/proc/self/mounts"
 	SelfRecordStatePath = "/etc/deepin-upgrade-manager/state.records"
+
+	LessKeepSize = 5 * 1024 * 1024 * 1024
 )
 
 const (
@@ -149,15 +151,30 @@ func (c *Upgrader) ResetRepo() {
 
 func (c *Upgrader) Init() (int, error) {
 	exitCode := _STATE_TY_SUCCESS
-
-	info := c.mountInfos.MaxPartition([]string{"/data", "/persistent"})
-	if nil != info {
-		mountPoint := strings.TrimSpace(info.MountPoint)
-		c.conf.ChangeRepoMountPoint(mountPoint)
-		c.ResetRepo()
-		logger.Debugf("changed the repo mount point to <%s>", mountPoint)
+	var repoMountPoint string
+	fsInfo, err := fstabinfo.Load("/etc/fstab", c.rootMP)
+	if err != nil {
+		repoMountPoint = c.mountInfos.MaxPartition([]string{"/data", "/persistent"})
+		logger.Warning("failed load /etc/fstab infos")
+	} else {
+		repoMountPoint = fsInfo.MaxFreePartitionPoint()
 	}
-	err := c.conf.Prepare()
+	for _, v := range c.conf.RepoList {
+		// need keep 5GB free space
+		isEnough, err := c.isDirSpaceEnough(repoMountPoint, c.rootMP, v.SubscribeList, LessKeepSize, false)
+		exitCode = _STATE_TY_FAILED_OSTREE_INIT
+		if !isEnough {
+			return int(exitCode), err
+		}
+	}
+
+	if len(repoMountPoint) != 0 {
+		point := strings.TrimSpace(repoMountPoint)
+		c.conf.ChangeRepoMountPoint(point)
+		c.ResetRepo()
+		logger.Debugf("find present system max partition is %s ,changed the repo mount point", point)
+	}
+	err = c.conf.Prepare()
 	if err != nil {
 		exitCode = _STATE_TY_FAILED_OSTREE_INIT
 		return int(exitCode), errors.New("failed to initialize config")
@@ -493,7 +510,19 @@ func (c *Upgrader) repoCommit(repoConf *config.RepoConfig, newVersion, subject s
 	}()
 	if useSysData {
 		// judging that the space for creating temporary files is sufficient
-		isEnough, err := c.isDirSpaceEnough(c.rootMP, repoConf.SubscribeList)
+		usrDir := filepath.Join(c.rootMP, "/usr")
+
+		// need to delete the repo to take up space, if a repo in the subscribeList
+		var extraSize int64
+		for _, v := range repoConf.SubscribeList {
+			if repoConf.RepoMountPoint == v {
+				extraSize += dirinfo.GetDirSize(repoConf.Repo)
+				extraSize += dirinfo.GetDirSize(repoConf.SnapshotDir)
+				extraSize += dirinfo.GetDirSize(repoConf.StageDir)
+				break
+			}
+		}
+		isEnough, err := c.isDirSpaceEnough(usrDir, c.rootMP, repoConf.SubscribeList, 0-extraSize, true)
 		if err != nil || !isEnough {
 			return err
 		}
@@ -502,6 +531,7 @@ func (c *Upgrader) repoCommit(repoConf *config.RepoConfig, newVersion, subject s
 			return err
 		}
 	}
+
 	logger.Debugf("will submitted version to the repo, version:%s, sub:%s, dataDir:%s", newVersion, subject, dataDir)
 	err := handler.Commit(newVersion, subject, dataDir)
 	if err != nil {
@@ -750,35 +780,37 @@ func (c *Upgrader) copyRepoData(rootDir, dataDir string,
 	return nil
 }
 
-func (c *Upgrader) isDirSpaceEnough(rootDir string, subscribeList []string) (bool, error) {
+func (c *Upgrader) isDirSpaceEnough(mountpoint, rootDir string, subscribeList []string,
+	extraSize int64, isFilterPartiton bool) (bool, error) {
 	var needSize int64
-	usrDir := filepath.Join(rootDir, "usr")
-	usrPart, err := dirinfo.GetDirPartition(usrDir)
-	logger.Debugf("the dir is:%s, the partiton is:%s", usrDir, usrPart)
+	mountPart, err := dirinfo.GetDirPartition(mountpoint)
+	logger.Debugf("the dir is:%s, the partiton is:%s", mountpoint, mountPart)
 	if err != nil {
 		return false, err
 	}
 	for _, dir := range subscribeList {
 		srcDir := filepath.Join(rootDir, dir)
+		if !util.IsExists(srcDir) {
+			continue
+		}
+
 		part, err := dirinfo.GetDirPartition(srcDir)
 		logger.Debugf("the dir is:%s, the partiton is:%s", srcDir, part)
 		if err != nil {
 			continue
 		}
-		if !util.IsExists(srcDir) {
-			continue
-		}
-		if part == usrPart {
-			continue
-		}
 
+		if isFilterPartiton && part == mountPart {
+			continue
+		}
 		needSize += dirinfo.GetDirSize(srcDir)
 	}
 	GB := 1024 * 1024 * 1024
-	free, _ := dirinfo.GetPartitionFreeSize(usrPart)
-	logger.Debugf("the %s partition free size:%.2f GB, the need size is:%.2f GB", usrPart,
-		float64(free)/float64(GB), float64(needSize)/float64(GB))
-	if uint64(needSize) > free {
+	free, _ := dirinfo.GetPartitionFreeSize(mountPart)
+
+	logger.Debugf("the %s partition free size:%.2f GB, extra size:%.2f GB, the need size is:%.2f GB", mountPart,
+		float64(free)/float64(GB), float64(extraSize)/float64(GB), float64(needSize)/float64(GB)+float64(extraSize)/float64(GB))
+	if uint64(needSize+extraSize) > free {
 		return false, errors.New("the current partition is out of space")
 	}
 	return true, nil

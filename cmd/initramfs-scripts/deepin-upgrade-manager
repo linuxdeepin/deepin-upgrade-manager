@@ -26,15 +26,17 @@ if test -e ${atomic_upgrade_config}; then
 	repo_mount_point=$(echo "$(cat ${atomic_upgrade_config})" | awk -F "[{,:}]" '{for(i=1;i<=NF;i++){if($i~"'${repo_records_point_key}'"){print $(i+1)}}}' | sed 's/\"//g')
 fi
 
-if [[ -n ${repo_mount_point} ]] && test -e ${atomic_upgrade_records};then
+if test -n ${repo_mount_point} && test -e ${atomic_upgrade_records};then
 	if [ "${readonly}" = "y" ]; then
 		mount -o rw,remount ${rootmnt}
 		readonly=n
 	fi
 
 	if read_fstab_entry ${repo_mount_point}; then
-		log_begin_msg "Mounting ${repo_mount_point} file system"
-		mountfs ${repo_mount_point}
+		if [ ${repo_mount_point} != "/" ]; then
+			mountfs ${repo_mount_point}
+			log_begin_msg "Mounting ${repo_mount_point} file system"
+		fi
 	fi
 	echo "will rollback to ${rootmnt}${repo_mount_point}/osroot/"
 	deepin-upgrade-manager --config="${atomic_upgrade_config}" --action=rollback --root="${rootmnt}"
