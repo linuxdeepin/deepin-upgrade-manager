@@ -785,7 +785,7 @@ func (c *Upgrader) isDirSpaceEnough(rootDir string, subscribeList []string) (boo
 }
 
 func (c *Upgrader) updataLoaclMount(snapDir string) (mountpoint.MountPointList, error) {
-	fstabDir := filepath.Join(snapDir, "etc/fstab")
+	fstabDir := filepath.Join(snapDir, "/etc/fstab")
 	_, err := ioutil.ReadFile(fstabDir)
 	var mountedPointList mountpoint.MountPointList
 	if err != nil {
