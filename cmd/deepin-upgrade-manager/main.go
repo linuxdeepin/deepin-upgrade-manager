@@ -4,6 +4,7 @@ import (
 	"deepin-upgrade-manager/pkg/config"
 	"deepin-upgrade-manager/pkg/logger"
 	"deepin-upgrade-manager/pkg/module/bootkitinfo"
+	"deepin-upgrade-manager/pkg/module/process"
 	"deepin-upgrade-manager/pkg/module/repo/branch"
 	"deepin-upgrade-manager/pkg/module/single"
 	"deepin-upgrade-manager/pkg/module/util"
@@ -13,6 +14,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/godbus/dbus"
 )
 
 const (
@@ -101,7 +104,7 @@ func handleAction(m *upgrader.Upgrader, c *config.Config) {
 			logger.Error("process already exists")
 			os.Exit(FAILED_PROCESS_EXISTS)
 		}
-		exitCode, err = m.Commit(*_version, *_subject, true, nil)
+		exitCode, err = m.Commit(*_version, *_subject, true, util.LocalLangEnv(), nil)
 		if err != nil {
 			logger.Error("commit failed:", err)
 			os.Exit(exitCode)
@@ -162,4 +165,34 @@ func handleAction(m *upgrader.Upgrader, c *config.Config) {
 		}
 		fmt.Println(sub)
 	}
+}
+
+func getLocaleEnvVarsWithSender(conn *dbus.Conn, sender dbus.Sender) ([]string, error) {
+	var result []string
+	var pid uint32
+	err := conn.BusObject().Call("org.freedesktop.DBus.GetConnectionUnixProcessID",
+		0, string(sender)).Store(&pid)
+	if err != nil {
+		return result, err
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	p := process.Process(pid)
+	environ, err := p.Environ()
+	if err != nil {
+		return nil, err
+	} else {
+		v, ok := environ.Lookup("LANG")
+		if ok {
+			result = append(result, "LANG="+v)
+		}
+		v, ok = environ.Lookup("LANGUAGE")
+		if ok {
+			result = append(result, "LANGUAGE="+v)
+		}
+	}
+	return result, nil
 }

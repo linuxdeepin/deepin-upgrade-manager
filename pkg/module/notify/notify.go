@@ -11,7 +11,6 @@ const (
 )
 
 func SetNotifyText(text string) error {
-
 	sysBus, err := dbus.SessionBus()
 	if err != nil {
 		return err

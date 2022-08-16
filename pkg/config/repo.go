@@ -100,6 +100,12 @@ func (c *Config) ChangeRepoMountPoint(mountpoint string) {
 	}
 }
 
+func (c *Config) SetDistribution(version string) {
+	if c.Distribution != version {
+		c.Distribution = version
+	}
+}
+
 func LoadConfig(filename string) (*Config, error) {
 	var info Config
 	err := loadFile(&info, filename)

@@ -68,10 +68,11 @@ func (m *Manager) ListVersion() ([]string, *dbus.Error) {
 	return vers, nil
 }
 
-func (m *Manager) Reset(locale string) *dbus.Error {
+func (m *Manager) Reset(sender dbus.Sender) *dbus.Error {
 	if !single.SetSingleInstance() {
 		return dbus.MakeFailedError(errors.New("process already exists"))
 	}
+
 	go func() {
 		m.DelayAutoQuit()
 		m.mu.Lock()
@@ -83,7 +84,8 @@ func (m *Manager) Reset(locale string) *dbus.Error {
 			m.mu.Unlock()
 			single.Remove()
 		}()
-		m.upgrade.ResetGrub(locale)
+		envVars, _ := getLocaleEnvVarsWithSender(m.conn, sender)
+		m.upgrade.ResetGrub(envVars)
 	}()
 	return nil
 }
@@ -112,7 +114,7 @@ func (m *Manager) Rollback(version string) *dbus.Error {
 	return nil
 }
 
-func (m *Manager) Commit(subject string) *dbus.Error {
+func (m *Manager) Commit(subject string, sender dbus.Sender) *dbus.Error {
 	if !single.SetSingleInstance() {
 		return dbus.MakeFailedError(errors.New("process already exists"))
 	}
@@ -136,7 +138,8 @@ func (m *Manager) Commit(subject string) *dbus.Error {
 				version = branch.GenInitName(m.upgrade.DistributionName())
 			}
 		}
-		exitCode, err := m.upgrade.Commit(version, subject, true, m.emitStateChanged)
+		envVars, _ := getLocaleEnvVarsWithSender(m.conn, sender)
+		exitCode, err := m.upgrade.Commit(version, subject, true, envVars, m.emitStateChanged)
 		if err != nil {
 			logger.Errorf("failed to commit version, err: %v, exit code: %d:", err, exitCode)
 			return

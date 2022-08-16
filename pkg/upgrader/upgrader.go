@@ -8,7 +8,6 @@ import (
 	"deepin-upgrade-manager/pkg/module/fstabinfo"
 	"deepin-upgrade-manager/pkg/module/generator"
 	"deepin-upgrade-manager/pkg/module/grub"
-	"deepin-upgrade-manager/pkg/module/langselector"
 	"deepin-upgrade-manager/pkg/module/mountinfo"
 	"deepin-upgrade-manager/pkg/module/mountpoint"
 	"deepin-upgrade-manager/pkg/module/notify"
@@ -20,6 +19,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
@@ -174,6 +174,14 @@ func (c *Upgrader) Init() (int, error) {
 		c.ResetRepo()
 		logger.Debugf("find present system max partition is %s ,changed the repo mount point", point)
 	}
+
+	osVersion, err := util.GetOSInfo("MajorVersion")
+	if nil != err {
+		logger.Error("failed get new version, err:", err)
+	} else {
+		c.conf.SetDistribution(osVersion)
+	}
+
 	err = c.conf.Prepare()
 	if err != nil {
 		exitCode = _STATE_TY_FAILED_OSTREE_INIT
@@ -201,7 +209,7 @@ func (c *Upgrader) SaveActiveVersion(version string) {
 	}
 }
 
-func (c *Upgrader) Commit(newVersion, subject string, useSysData bool,
+func (c *Upgrader) Commit(newVersion, subject string, useSysData bool, envVars []string,
 	evHandler func(op, state int32, target, desc string)) (excode int, err error) {
 	exitCode := _STATE_TY_SUCCESS
 	var isClean bool
@@ -239,7 +247,7 @@ func (c *Upgrader) Commit(newVersion, subject string, useSysData bool,
 	}
 	// prevent another update grub
 	if !isClean {
-		exitCode, err = c.UpdateGrub()
+		exitCode, err = c.UpdateGrub(envVars)
 		if err != nil {
 			exitCode = _STATE_TY_FAILED_UPDATE_GRUB
 			goto failure
@@ -280,13 +288,16 @@ func (c *Upgrader) IsExistRepo() bool {
 	return true
 }
 
-func (c *Upgrader) UpdateGrub() (stateType, error) {
+func (c *Upgrader) UpdateGrub(envVars []string) (stateType, error) {
 	exitCode := _STATE_TY_SUCCESS
 	logger.Info("start update grub")
-	err := util.ExecCommand("update-grub", []string{})
+	cmd := exec.Command("update-grub")
+	cmd.Env = append(cmd.Env, envVars...)
+	_, err := cmd.Output()
 	if err != nil {
 		exitCode = _STATE_TY_FAILED_UPDATE_GRUB
 	}
+	cmd.Wait()
 	return exitCode, err
 }
 
@@ -695,7 +706,6 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 			}
 		}
 	}
-
 	// hardlink need to filter file or dir to prepare dir
 	for _, dir := range rollbackDirList {
 		dirRoot := filepath.Dir(dir)
@@ -783,6 +793,7 @@ func (c *Upgrader) copyRepoData(rootDir, dataDir string,
 func (c *Upgrader) isDirSpaceEnough(mountpoint, rootDir string, subscribeList []string,
 	extraSize int64, isFilterPartiton bool) (bool, error) {
 	var needSize int64
+
 	mountPart, err := dirinfo.GetDirPartition(mountpoint)
 	logger.Debugf("the dir is:%s, the partiton is:%s", mountpoint, mountPart)
 	if err != nil {
@@ -803,6 +814,7 @@ func (c *Upgrader) isDirSpaceEnough(mountpoint, rootDir string, subscribeList []
 		if isFilterPartiton && part == mountPart {
 			continue
 		}
+		//the repo is full submission, so need add hard link size
 		needSize += dirinfo.GetDirSize(srcDir)
 	}
 	GB := 1024 * 1024 * 1024
@@ -951,7 +963,7 @@ func (c *Upgrader) Delete(version string,
 	logger.Debug("delete kernel snapshot directory:", bootDir)
 	_ = os.RemoveAll(bootDir)
 
-	exitCode, err = c.UpdateGrub()
+	exitCode, err = c.UpdateGrub(util.LocalLangEnv())
 	if err != nil {
 		exitCode = _STATE_TY_FAILED_UPDATE_GRUB
 		goto failure
@@ -1030,13 +1042,13 @@ func (c *Upgrader) Subject(version string) (string, error) {
 	return handler.Subject(version)
 }
 
-func (c *Upgrader) ResetGrub(locale string) {
+func (c *Upgrader) ResetGrub(envVars []string) {
 	err := c.LoadRollbackRecords(false)
 	if err != nil {
 		logger.Warning(err)
 		return
 	}
-	c.recordsInfo.ResetState(locale)
+	c.recordsInfo.ResetState(envVars)
 	c.recordsInfo.Remove()
 }
 
@@ -1085,8 +1097,7 @@ func (c *Upgrader) SendSystemNotice() error {
 			logger.Warning("failed send system notice, err:", err)
 		}
 		metho := atomicUpgradeDest + ".Reset"
-		lang, _ := langselector.GetCurrentLocale()
-		return grubServiceObj.Call(metho, 0, lang).Store()
+		return grubServiceObj.Call(metho, 0).Store()
 	}
 	return nil
 }

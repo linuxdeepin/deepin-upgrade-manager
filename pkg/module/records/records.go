@@ -205,7 +205,7 @@ func (info *RecordsInfo) Remove() {
 	logger.Debugf("remove records rollback state file: %s", info.filename)
 }
 
-func (info *RecordsInfo) ResetState(locale string) {
+func (info *RecordsInfo) ResetState(envVars []string) {
 	if len(info.RollbackVersion) != 0 {
 		currTimeOut, _ := grub.TimeOut()
 
@@ -221,9 +221,9 @@ func (info *RecordsInfo) ResetState(locale string) {
 		// Compatible with many languages
 		fd, err := login.Inhibit("shutdown", "org.deepin.AtomicUpgrade1",
 			"Updating the grub, please shut down or reboot later.")
-		envLang := "LANG=" + locale
+
 		cmd := exec.Command("update-grub")
-		cmd.Env = append(cmd.Env, envLang)
+		cmd.Env = append(cmd.Env, envVars...)
 		_ = cmd.Start()
 		if err != nil {
 			logger.Warning(err)

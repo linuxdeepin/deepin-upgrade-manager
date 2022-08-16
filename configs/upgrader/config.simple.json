@@ -25,6 +25,9 @@
         "/var/lib/selinux"
       ],
       "filter_list": [
+        "/usr/lib/locale/locale-archive",
+        "/etc/locale.gen",
+        "/usr/share/deepin-defender/localcache.db"
       ]
     }
   ]

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"deepin-upgrade-manager/pkg/logger"
+	"deepin-upgrade-manager/pkg/module/util"
 	"deepin-upgrade-manager/pkg/upgrader"
 	"flag"
 	"fmt"
@@ -17,6 +19,11 @@ var (
 
 func main() {
 	flag.Parse()
+	logger.NewLogger("deepin-upgrade-manager-tool", true)
+	err := util.FixEnvPath()
+	if err != nil {
+		logger.Warning("Failed to setenv:", err)
+	}
 	m := upgrader.NewUpgraderTool()
 	switch *_action {
 	case _ACTION_NOTIFY:

@@ -821,7 +821,6 @@ func HandlerFilterList(rootDir, realDir string, filterList []string) (filterDirs
 }
 
 func GetOSInfo(keyname string) (string, error) {
-
 	fh, err := os.Open(OSInfoPath)
 	if err != nil {
 		return "", err
@@ -870,12 +869,20 @@ func Tr(text string) string {
 	return text
 }
 
+func LocalLangEnv() (result []string) {
+	result = append(result, "LANG="+os.Getenv("LANG"))
+	result = append(result, "LANGUAGE="+os.Getenv("LANGUAGE"))
+	return
+}
+
 func GetUpgradeText(text string) (string, error) {
 	cmd := exec.Command("gettext", "-d", "deepin-upgrade-manager", text)
+	cmd.Env = append(cmd.Env, LocalLangEnv()...)
 	getTextOut, err := cmd.Output()
 	if err != nil {
 		return text, err
 	}
+	cmd.Wait()
 	getTextOut = bytes.TrimSpace(getTextOut)
 	if len(getTextOut) == 0 {
 		return text, nil
@@ -885,10 +892,12 @@ func GetUpgradeText(text string) (string, error) {
 
 func GetBootKitText(text string) (string, error) {
 	cmd := exec.Command("gettext", "-d", "deepin-boot-kit", text)
+	cmd.Env = append(cmd.Env, LocalLangEnv()...)
 	getTextOut, err := cmd.Output()
 	if err != nil {
 		return text, err
 	}
+	cmd.Wait()
 	getTextOut = bytes.TrimSpace(getTextOut)
 	if len(getTextOut) == 0 {
 		return text, nil
