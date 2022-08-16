@@ -3,6 +3,7 @@ package ostree
 import (
 	"deepin-upgrade-manager/pkg/module/repo/branch"
 	"deepin-upgrade-manager/pkg/module/util"
+	"encoding/base64"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -101,8 +102,9 @@ func (repo *OSTree) Commit(branchName, subject, dataDir string) error {
 	if !branch.IsValid(branchName) {
 		return fmt.Errorf("invalid branch name: %s", branchName)
 	}
+	encodedText := base64.StdEncoding.EncodeToString([]byte(subject))
 	_, err := doAction([]string{"commit", "--repo=" + repo.repoDir,
-		"--branch=" + branchName, "--subject=" + subject, dataDir})
+		"--branch=" + branchName, "--subject=" + encodedText, dataDir})
 	return err
 }
 
@@ -229,7 +231,8 @@ func (repo *OSTree) Subject(branchName string) (string, error) {
 	if len(lines) < 2 {
 		return "", fmt.Errorf("commit does not exist")
 	}
-	return strings.TrimSpace(lines[1]), nil
+	encodedText, _ := base64.StdEncoding.DecodeString((strings.TrimSpace(lines[1])))
+	return string(encodedText), nil
 }
 
 func (repo *OSTree) CommitTime(branchName string) (string, error) {
