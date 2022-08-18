@@ -1,3 +1,9 @@
+deepin-upgrade-manager (1.0.8) unstable; urgency=medium
+
+  * Add adapter multiple partition
+
+ -- Chenghao Liu <liuchenghao@uniontech.com>  Tue, 18 Aug 2022 16:24:03 +0800
+
 deepin-upgrade-manager (1.0.7) unstable; urgency=medium
 
   * Add adapter v20 system
