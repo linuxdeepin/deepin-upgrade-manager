@@ -16,7 +16,7 @@ esac
 . /scripts/local
 . /scripts/nfs
 
-repo_remount=n
+repo_mount=n
 
 atomic_upgrade_config=${rootmnt}/etc/deepin-upgrade-manager/config.json
 atomic_upgrade_records=${rootmnt}/etc/deepin-upgrade-manager/state.records
@@ -37,7 +37,7 @@ if test -n ${repo_mount_point} && test -e ${atomic_upgrade_records};then
 	if read_fstab_entry ${repo_mount_point}; then
 		if [ ${repo_mount_point} != "/" ]; then
 			mountfs ${repo_mount_point}
-			repo_remount=y
+			repo_mount=y
 			log_begin_msg "Mounting ${repo_mount_point} file system"
 		fi
 	fi
@@ -47,7 +47,7 @@ if test -n ${repo_mount_point} && test -e ${atomic_upgrade_records};then
 		mount -o ro,remount ${rootmnt}
 		readonly=y
 	fi
-	if [ "${repo_remount}" = "y" ]; then
+	if [ "${repo_mount}" = "y" ]; then
 		umount ${rootmnt}${repo_mount_point}
 	fi
 fi

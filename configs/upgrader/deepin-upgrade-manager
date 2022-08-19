@@ -28,7 +28,7 @@ done
 
 atomic_upgrade_config=${rootmnt}/etc/deepin-upgrade-manager/config.json
 
-repo_remount=n
+repo_mount=n
 
 repo_records_point_key=repo_mount_point
 repo_mount_point=
@@ -45,7 +45,7 @@ if [[ -n ${repo_mount_point} ]];then
 	if read_fstab_entry ${repo_mount_point}; then
 		if [ ${repo_mount_point} != "/" ]; then
 			mountfs ${repo_mount_point}
-			repo_remount=y
+			repo_mount=y
 			log_begin_msg "Mounting ${repo_mount_point} file system"
 		fi
 	fi
@@ -55,7 +55,7 @@ if [[ -n ${repo_mount_point} ]];then
 		mount -o ro,remount ${rootmnt}
 		readonly=y
 	fi
-	if [ "${repo_remount}" = "y" ]; then
+	if [ "${repo_mount}" = "y" ]; then
 		umount ${rootmnt}${repo_mount_point}
 	fi
 fi
