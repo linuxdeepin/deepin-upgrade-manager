@@ -17,6 +17,7 @@ type BootInfo struct {
 	Initrd      string `json:"initrd"`
 	Scheme      string `json:"scheme"`
 	DisplayInfo string `json:"display"`
+	UUID        string `json:"uuid"`
 }
 
 type BootInfos []*BootInfo

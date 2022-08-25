@@ -90,9 +90,10 @@ func (b *Bootkit) GetScriptDirList() []string {
 	return scriptsList
 }
 
-func (b *Bootkit) GenerateGrubMenu(menu, linux, initrd, grubcmdlinelinux, grubcmdlinelinuxdefault, backversion, backscheme string) []string {
+func (b *Bootkit) GenerateGrubMenu(menu, linux, initrd, grubcmdlinelinux, grubcmdlinelinuxdefault,
+	backversion, backscheme, backuuid string) []string {
 	var menus []string
-	arg := grubcmdlinelinux + " " + grubcmdlinelinuxdefault + " " + backversion + " " + backscheme
+	arg := grubcmdlinelinux + " " + grubcmdlinelinuxdefault + " " + backversion + " " + backscheme + " " + backuuid
 	CLASS := "--class gnu-linux --class gnu --class os"
 	UUID := os.Getenv("GRUB_DEVICE_UUID")
 	submenu_indentation := os.Getenv("grub_tab")
@@ -184,12 +185,18 @@ func (b *Bootkit) GenerateDefaultGrub() string {
 		if len(display) == 0 {
 			display = fmt.Sprintf("Rollback to %s", v)
 		}
+
 		menu_entry := display
 		grubCmdliuxLinux := os.Getenv("GRUB_CMDLINE_LINUX")
 		grubCmdliuxLinuxDefault := os.Getenv("GRUB_CMDLINE_LINUX_DEFAULT")
 		backVersion := fmt.Sprintf("back_version=%s", v.Version)
 		backScheme := fmt.Sprintf("back_scheme=%s", v.Scheme)
-		menus := b.GenerateGrubMenu(menu_entry, v.Kernel, v.Initrd, grubCmdliuxLinux, grubCmdliuxLinuxDefault, backVersion, backScheme)
+		var backuuid string
+		if len(v.UUID) != 0 {
+			backuuid = fmt.Sprintf("backup_uuid=%s", v.UUID)
+		}
+		menus := b.GenerateGrubMenu(menu_entry, v.Kernel, v.Initrd, grubCmdliuxLinux,
+			grubCmdliuxLinuxDefault, backVersion, backScheme, backuuid)
 		grubInfos = append(grubInfos, menus...)
 	}
 	grubInfos = append(grubInfos, "}")
