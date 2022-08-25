@@ -59,14 +59,14 @@ func SetTimeout(timeout uint32) error {
 	return nil
 }
 
-func Reset() error {
+func CancelRollback() error {
 	sysBus, err := dbus.SystemBus()
 	if err != nil {
 		return err
 	}
 	grubServiceObj := sysBus.Object(dbusDest,
 		dbusPath)
-	metho := dbusDest + ".Reset"
+	metho := dbusDest + ".CancelRollback"
 
 	return grubServiceObj.Call(metho, 0).Store()
 }

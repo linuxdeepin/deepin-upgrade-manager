@@ -37,6 +37,7 @@ func NewManager(config *config.Config, daemon bool) (*Manager, error) {
 	var m = &Manager{
 		upgrade:       upgrade,
 		ActiveVersion: config.ActiveVersion,
+		running:       false,
 	}
 
 	if daemon {
@@ -68,7 +69,7 @@ func (m *Manager) ListVersion() ([]string, *dbus.Error) {
 	return vers, nil
 }
 
-func (m *Manager) Reset(sender dbus.Sender) *dbus.Error {
+func (m *Manager) CancelRollback(sender dbus.Sender) *dbus.Error {
 	if !single.SetSingleInstance() {
 		return dbus.MakeFailedError(errors.New("process already exists"))
 	}

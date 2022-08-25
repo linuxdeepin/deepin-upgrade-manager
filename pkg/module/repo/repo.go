@@ -10,6 +10,7 @@ type Repository interface {
 	Init() error
 	Exist(branchName string) bool
 	Last() (string, error)
+	First() (string, error)
 	List() (branch.BranchList, error)
 	ListByName(branchName string, offset, limit int) (branch.BranchList, int, error)
 	Snapshot(branchName, dstDir string) error

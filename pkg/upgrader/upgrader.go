@@ -44,9 +44,25 @@ const (
 )
 
 const (
-	_OP_TY_COMMIT opType = iota + 1
-	_OP_TY_ROLLBACK
-	_OP_TY_DELETE
+	_OP_TY_COMMIT_START opType = iota + 100
+	_OP_TY_COMMIT_PREPARE_DATA
+	_OP_TY_COMMIT_REPO_SUBMIT
+	_OP_TY_COMMIT_REPO_CLEAN
+	_OP_TY_COMMIT_GRUB_UPDATE
+	_OP_TY_COMMIT_END opType = 110
+)
+
+const (
+	_OP_TY_ROLLBACK_PREPARING_START opType = iota + 200
+	_OP_TY_ROLLBACK_PREPARING_SET_CONFIG
+	_OP_TY_ROLLBACK_PREPARING_SET_WAITTIME
+	_OP_TY_ROLLBACK_PREPARING_END opType = 210
+)
+
+const (
+	_OP_TY_DELETE_START opType = iota + 300
+	_OP_TY_DELETE_GRUB_UPDATE
+	_OP_TY_DELETE_END opType = 310
 )
 
 const (
@@ -59,10 +75,14 @@ const (
 	_STATE_TY_FAILED_OSTREE_COMMIT
 	_STATE_TY_FAILED_OSTREE_ROLLBACK
 	_STATE_TY_FAILED_VERSION_DELETE
+	_STATE_TY_FAILED_NO_VERSION
+	_STATE_TY_RUNING stateType = 1
 )
 
 func (state stateType) String() string {
 	switch state {
+	case _STATE_TY_RUNING:
+		return "running"
 	case _STATE_TY_SUCCESS:
 		return "success"
 	case _STATE_TY_FAILED_NO_SPACE:
@@ -81,18 +101,42 @@ func (state stateType) String() string {
 		return "failed ostree init"
 	case _STATE_TY_FAILED_VERSION_DELETE:
 		return "version not allowed to delete"
+	case _STATE_TY_FAILED_NO_VERSION:
+		return "version does not exist"
 	}
 	return "unknown"
 }
 
 func (op opType) String() string {
 	switch op {
-	case _OP_TY_ROLLBACK:
-		return "rollback"
-	case _OP_TY_COMMIT:
-		return "commit"
-	case _OP_TY_DELETE:
-		return "delete"
+	case _OP_TY_COMMIT_START:
+		return "start version submited"
+	case _OP_TY_COMMIT_PREPARE_DATA:
+		return "start to submit data preparation"
+	case _OP_TY_COMMIT_REPO_SUBMIT:
+		return "start to submit data"
+	case _OP_TY_COMMIT_REPO_CLEAN:
+		return "start to repo cleaning"
+	case _OP_TY_COMMIT_GRUB_UPDATE:
+		return "start to grub updating"
+	case _OP_TY_COMMIT_END:
+		return "end version submited"
+
+	case _OP_TY_ROLLBACK_PREPARING_START:
+		return "start preparing rollback"
+	case _OP_TY_ROLLBACK_PREPARING_SET_CONFIG:
+		return "start set preparing rollback configuration file"
+	case _OP_TY_ROLLBACK_PREPARING_SET_WAITTIME:
+		return "start set the grub waiting time "
+	case _OP_TY_ROLLBACK_PREPARING_END:
+		return "end preparing rollback"
+
+	case _OP_TY_DELETE_START:
+		return "start remove the repo version"
+	case _OP_TY_DELETE_GRUB_UPDATE:
+		return "start to grub updating"
+	case _OP_TY_DELETE_END:
+		return "end remove the repo version"
 	}
 	return "unknown"
 }
@@ -213,6 +257,8 @@ func (c *Upgrader) Commit(newVersion, subject string, useSysData bool, envVars [
 	evHandler func(op, state int32, target, desc string)) (excode int, err error) {
 	exitCode := _STATE_TY_SUCCESS
 	var isClean bool
+	c.SendingSignal(evHandler, _OP_TY_COMMIT_START, _STATE_TY_RUNING, newVersion, "")
+
 	if len(newVersion) == 0 {
 		newVersion, err = bootkitinfo.NewVersion()
 		if err != nil {
@@ -229,7 +275,7 @@ func (c *Upgrader) Commit(newVersion, subject string, useSysData bool, envVars [
 	}
 	logger.Info("the version number of this submission is:", newVersion)
 	for _, v := range c.conf.RepoList {
-		err = c.repoCommit(v, newVersion, subject, useSysData)
+		err = c.repoCommit(v, newVersion, subject, useSysData, evHandler)
 		if err != nil {
 			exitCode = _STATE_TY_FAILED_OSTREE_COMMIT
 			goto failure
@@ -239,6 +285,7 @@ func (c *Upgrader) Commit(newVersion, subject string, useSysData bool, envVars [
 
 	// automatically clear redundant versions
 	if c.IsAutoClean() {
+		c.SendingSignal(evHandler, _OP_TY_COMMIT_REPO_CLEAN, _STATE_TY_RUNING, newVersion, "")
 		isClean, err = c.RepoAutoCleanup()
 		if err != nil {
 			logger.Error("failed auto cleanup repo, err:", err)
@@ -247,6 +294,8 @@ func (c *Upgrader) Commit(newVersion, subject string, useSysData bool, envVars [
 	}
 	// prevent another update grub
 	if !isClean {
+		c.SendingSignal(evHandler, _OP_TY_COMMIT_GRUB_UPDATE, _STATE_TY_RUNING, newVersion, "")
+
 		exitCode, err = c.UpdateGrub(envVars)
 		if err != nil {
 			exitCode = _STATE_TY_FAILED_UPDATE_GRUB
@@ -254,16 +303,10 @@ func (c *Upgrader) Commit(newVersion, subject string, useSysData bool, envVars [
 		}
 	}
 
-	if evHandler != nil {
-		evHandler(int32(_OP_TY_COMMIT), int32(_STATE_TY_SUCCESS), newVersion,
-			fmt.Sprintf("%s: %s", _OP_TY_COMMIT.String(), _STATE_TY_SUCCESS.String()))
-	}
+	c.SendingSignal(evHandler, _OP_TY_COMMIT_END, _STATE_TY_SUCCESS, newVersion, "")
 	return int(exitCode), nil
 failure:
-	if evHandler != nil {
-		evHandler(int32(_OP_TY_COMMIT), int32(exitCode), newVersion,
-			fmt.Sprintf("%s: %s: %s", _OP_TY_COMMIT.String(), exitCode.String(), err))
-	}
+	c.SendingSignal(evHandler, _OP_TY_COMMIT_END, exitCode, newVersion, err.Error())
 	return int(exitCode), err
 }
 
@@ -443,7 +486,9 @@ func (c *Upgrader) getRollbackInfo(version, rootdir string) (string, bool, error
 func (c *Upgrader) Rollback(version string,
 	evHandler func(op, state int32, target, desc string)) (excode int, err error) {
 	exitCode := _STATE_TY_SUCCESS
+	c.SendingSignal(evHandler, _OP_TY_ROLLBACK_PREPARING_START, _STATE_TY_RUNING, version, "")
 	c.LoadRollbackRecords(true)
+	c.SendingSignal(evHandler, _OP_TY_ROLLBACK_PREPARING_SET_CONFIG, _STATE_TY_RUNING, version, "")
 	backVersion, isCanRollback, err := c.getRollbackInfo(version, c.rootMP)
 	if err != nil {
 		exitCode = _STATE_TY_FAILED_NO_REPO
@@ -487,6 +532,7 @@ func (c *Upgrader) Rollback(version string,
 			}
 		}
 	} else {
+		c.SendingSignal(evHandler, _OP_TY_ROLLBACK_PREPARING_SET_WAITTIME, _STATE_TY_RUNING, version, "")
 		err := grub.SetTimeout(0)
 		if err != nil {
 			logger.Warning("failed set the rollback waiting time")
@@ -497,22 +543,17 @@ func (c *Upgrader) Rollback(version string,
 
 		logger.Info("start set rollback a old version:", backVersion)
 	}
-	if evHandler != nil {
-		evHandler(int32(_OP_TY_ROLLBACK), int32(_STATE_TY_SUCCESS), version,
-			fmt.Sprintf("%s: %s", _OP_TY_ROLLBACK.String(), _STATE_TY_SUCCESS.String()))
-	}
+	c.SendingSignal(evHandler, _OP_TY_ROLLBACK_PREPARING_END, _STATE_TY_SUCCESS, version, "")
+
 	logger.Info("successed run rollback action")
 	return int(exitCode), nil
 failure:
-	if evHandler != nil {
-		evHandler(int32(_OP_TY_ROLLBACK), int32(exitCode), version,
-			fmt.Sprintf("%s: %s: %s", _OP_TY_ROLLBACK.String(), exitCode.String(), err))
-	}
+	c.SendingSignal(evHandler, _OP_TY_ROLLBACK_PREPARING_END, exitCode, version, err.Error())
 	return int(exitCode), err
 }
 
 func (c *Upgrader) repoCommit(repoConf *config.RepoConfig, newVersion, subject string,
-	useSysData bool) error {
+	useSysData bool, evHandler func(op, state int32, target, desc string)) error {
 	handler := c.repoSet[repoConf.Repo]
 	dataDir := filepath.Join(c.rootMP, c.conf.CacheDir, c.conf.Distribution)
 	defer func() {
@@ -520,6 +561,7 @@ func (c *Upgrader) repoCommit(repoConf *config.RepoConfig, newVersion, subject s
 		_ = os.RemoveAll(filepath.Join(c.rootMP, c.conf.CacheDir))
 	}()
 	if useSysData {
+		c.SendingSignal(evHandler, _OP_TY_COMMIT_PREPARE_DATA, _STATE_TY_RUNING, newVersion, "")
 		// judging that the space for creating temporary files is sufficient
 		usrDir := filepath.Join(c.rootMP, "/usr")
 
@@ -542,7 +584,7 @@ func (c *Upgrader) repoCommit(repoConf *config.RepoConfig, newVersion, subject s
 			return err
 		}
 	}
-
+	c.SendingSignal(evHandler, _OP_TY_COMMIT_REPO_SUBMIT, _STATE_TY_RUNING, newVersion, "")
 	logger.Debugf("will submitted version to the repo, version:%s, sub:%s, dataDir:%s", newVersion, subject, dataDir)
 	err := handler.Commit(newVersion, subject, dataDir)
 	if err != nil {
@@ -932,17 +974,12 @@ func (c *Upgrader) RepoAutoCleanup() (bool, error) {
 func (c *Upgrader) Delete(version string,
 	evHandler func(op, state int32, target, desc string)) (excode int, err error) {
 	exitCode := _STATE_TY_SUCCESS
-	var bootDir, snapshotDir string
+	var bootDir, snapshotDir, fisrt string
 	var handler repo.Repository
-
+	c.SendingSignal(evHandler, _OP_TY_DELETE_START, _STATE_TY_RUNING, version, "")
 	if len(c.conf.RepoList) == 0 || len(version) == 0 {
 		err = errors.New("wrong version number")
 		exitCode = _STATE_TY_FAILED_NO_REPO
-		goto failure
-	}
-	if version == c.conf.ActiveVersion {
-		err = errors.New("the current activated version does not allow deletion")
-		exitCode = _STATE_TY_FAILED_VERSION_DELETE
 		goto failure
 	}
 	handler, err = repo.NewRepo(repo.REPO_TY_OSTREE,
@@ -951,9 +988,19 @@ func (c *Upgrader) Delete(version string,
 		exitCode = _STATE_TY_FAILED_NO_REPO
 		goto failure
 	}
+	fisrt, err = handler.First()
+	if err != nil {
+		exitCode = _STATE_TY_FAILED_NO_REPO
+		goto failure
+	}
+	if fisrt == version || c.conf.ActiveVersion == version {
+		err = errors.New("the current activated version does not allow deletion")
+		exitCode = _STATE_TY_FAILED_VERSION_DELETE
+		goto failure
+	}
 	err = handler.Delete(version)
 	if err != nil {
-		exitCode = _STATE_TY_FAILED_VERSION_DELETE
+		exitCode = _STATE_TY_FAILED_NO_VERSION
 		goto failure
 	}
 	snapshotDir = filepath.Join(c.rootMP, c.conf.RepoList[0].SnapshotDir, version)
@@ -963,21 +1010,16 @@ func (c *Upgrader) Delete(version string,
 	logger.Debug("delete kernel snapshot directory:", bootDir)
 	_ = os.RemoveAll(bootDir)
 
+	c.SendingSignal(evHandler, _OP_TY_DELETE_GRUB_UPDATE, _STATE_TY_RUNING, version, "")
 	exitCode, err = c.UpdateGrub(util.LocalLangEnv())
 	if err != nil {
 		exitCode = _STATE_TY_FAILED_UPDATE_GRUB
 		goto failure
 	}
-	if evHandler != nil {
-		evHandler(int32(_OP_TY_DELETE), int32(exitCode), version,
-			fmt.Sprintf("%s: %s", _OP_TY_DELETE.String(), _STATE_TY_SUCCESS.String()))
-	}
+	c.SendingSignal(evHandler, _OP_TY_DELETE_END, exitCode, version, "")
 	return int(exitCode), nil
 failure:
-	if evHandler != nil {
-		evHandler(int32(_OP_TY_DELETE), int32(exitCode), version,
-			fmt.Sprintf("%s: %s: %s", _OP_TY_DELETE.String(), exitCode.String(), err))
-	}
+	c.SendingSignal(evHandler, _OP_TY_DELETE_END, exitCode, version, err.Error())
 	return int(exitCode), err
 }
 
@@ -1052,6 +1094,20 @@ func (c *Upgrader) ResetGrub(envVars []string) {
 	c.recordsInfo.Remove()
 }
 
+func (c *Upgrader) SendingSignal(evHandler func(op, state int32, target, desc string),
+	op opType, exitCode stateType, version, err string) {
+	if evHandler == nil {
+		return
+	}
+	if len(err) != 0 {
+		evHandler(int32(op), int32(exitCode), (version),
+			fmt.Sprintf("%s: %s: %s", op.String(), exitCode.String(), err))
+	} else {
+		evHandler(int32(op), int32(exitCode), (version),
+			fmt.Sprintf("%s: %s", op.String(), exitCode.String()))
+	}
+}
+
 func (c *Upgrader) SendSystemNotice() error {
 	var backMsg, grubTitle string
 	const atomicUpgradeDest = "org.deepin.AtomicUpgrade1"
@@ -1096,7 +1152,7 @@ func (c *Upgrader) SendSystemNotice() error {
 		if err != nil {
 			logger.Warning("failed send system notice, err:", err)
 		}
-		metho := atomicUpgradeDest + ".Reset"
+		metho := atomicUpgradeDest + ".CancelRollback"
 		return grubServiceObj.Call(metho, 0).Store()
 	}
 	return nil

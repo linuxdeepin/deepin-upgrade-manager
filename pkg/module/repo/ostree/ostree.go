@@ -53,6 +53,17 @@ func (repo *OSTree) Last() (string, error) {
 	return list[0], nil
 }
 
+func (repo *OSTree) First() (string, error) {
+	list, err := repo.listRefs()
+	if err != nil {
+		return "", err
+	}
+	if len(list) == 0 {
+		return "", nil
+	}
+	return list[len(list)-1], nil
+}
+
 func (repo *OSTree) List() (branch.BranchList, error) {
 	refs, err := repo.listRefs()
 	if err != nil {

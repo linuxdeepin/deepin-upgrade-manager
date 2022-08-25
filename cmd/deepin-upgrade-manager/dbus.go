@@ -75,6 +75,15 @@ func (m *Manager) makeProps() map[string]map[string]*prop.Prop {
 					return nil
 				},
 			},
+			"Runing": &prop.Prop{
+				Value:    &m.running,
+				Writable: false,
+				Emit:     prop.EmitTrue,
+				Callback: func(c *prop.Change) *dbus.Error {
+					logger.Debugf("Runing changed: %s -> %s", c.Name, c.Value)
+					return nil
+				},
+			},
 		},
 	}
 }
