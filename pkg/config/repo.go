@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -94,7 +95,7 @@ func (c *Config) ChangeRepoMountPoint(mountpoint string) {
 			v.StageDir = strings.Replace(v.StageDir, v.RepoMountPoint, mountpoint, 1)
 		}
 		if isExist {
-			v.FilterList = append(v.FilterList, v.Repo, v.SnapshotDir, v.StageDir)
+			v.FilterList = append(v.FilterList, filepath.Dir(v.Repo))
 		}
 		v.RepoMountPoint = mountpoint
 	}

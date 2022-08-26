@@ -767,7 +767,7 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 				continue
 			}
 			dest := filepath.Join(dir, strings.TrimPrefix(v, dirRoot))
-			util.CopyDir(v, dest, nil, nil, false)
+			util.CopyDir(v, dest, nil, nil, true)
 			logger.Debugf("ignore dir path:%s", dest)
 		}
 		for _, v := range filterFiles {
@@ -780,7 +780,7 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 				continue
 			}
 			dest := filepath.Join(dir, strings.TrimPrefix(v, dirRoot))
-			util.CopyFile(v, dest, false)
+			util.CopyFile(v, dest, true)
 			logger.Debugf("ignore file path:%s", dest)
 		}
 	}
