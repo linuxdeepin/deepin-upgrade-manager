@@ -14,6 +14,7 @@ CURRENT_DIR=$(notdir $(shell pwd))
 ARCH=$(shell arch)
 export GO111MODULE=off
 
+
 all: build
 
 prepare:
@@ -33,9 +34,18 @@ build: prepare
 	@env GOPATH=${PWD}/${GOPATH_DIR}:${GOCODE}:${GOPATH} ls -al ${PWD}/${GOPATH_DIR}/src/deepin-upgrade-manager/*
 	@env GOPATH=${PWD}/${GOPATH_DIR}:${GOCODE}:${GOPATH} ls -al ${PWD}/${GOPATH_DIR}/src/deepin-upgrade-manager/cmd/deepin-upgrade-manager/*
 	@env GOPATH=${PWD}/${GOPATH_DIR}:${GOCODE}:${GOPATH} ls -al ${PWD}/${GOPATH_DIR}/src/deepin-upgrade-manager/cmd/deepin-boot-kit/*
-	@env GOPATH=${PWD}/${GOPATH_DIR}:${GOCODE}:${GOPATH} go build -o ${PWD}/${PROG_UPGRADER} ${PRJ}/cmd/${PROG_UPGRADER}
-	@env GOPATH=${PWD}/${GOPATH_DIR}:${GOCODE}:${GOPATH} go build -o ${PWD}/${PROG_BOOTKIT} ${PRJ}/cmd/${PROG_BOOTKIT}
-	@env GOPATH=${PWD}/${GOPATH_DIR}:${GOCODE}:${GOPATH} go build -o ${PWD}/${PROG_UPGRADER_TOOL} ${PRJ}/cmd/${PROG_UPGRADER_TOOL}
+
+	@env GOPATH=${PWD}/${GOPATH_DIR}:${GOCODE}:${GOPATH}  \
+	CGO_CPPFLAGS="-D_FORTIFY_SOURCE=2"  CGO_LDFLAGS="-Wl,-z,relro,-z,now" \
+	go build -o ${PWD}/${PROG_UPGRADER} $(GO_BUILD_FLAGS) ${PRJ}/cmd/${PROG_UPGRADER}
+
+	@env GOPATH=${PWD}/${GOPATH_DIR}:${GOCODE}:${GOPATH} \
+	CGO_CPPFLAGS="-D_FORTIFY_SOURCE=2"  CGO_LDFLAGS="-Wl,-z,relro,-z,now" \
+	go build -o ${PWD}/${PROG_BOOTKIT} $(GO_BUILD_FLAGS) ${PRJ}/cmd/${PROG_BOOTKIT}
+
+	@env GOPATH=${PWD}/${GOPATH_DIR}:${GOCODE}:${GOPATH} \
+	CGO_CPPFLAGS="-D_FORTIFY_SOURCE=2"  CGO_LDFLAGS="-Wl,-z,relro,-z,now" \
+	go build -o ${PWD}/${PROG_UPGRADER_TOOL} $(GO_BUILD_FLAGS) ${PRJ}/cmd/${PROG_UPGRADER_TOOL}
 
 install-upgrader:
 #ifeq ($(ARCH),sw_64)
