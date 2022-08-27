@@ -5,6 +5,7 @@ import (
 	"deepin-upgrade-manager/pkg/logger"
 	"deepin-upgrade-manager/pkg/module/dirinfo"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -75,12 +76,15 @@ func isExist(info MountInfo, list MountInfoList) bool {
 }
 
 func Load(filename string) (MountInfoList, error) {
-	fr, err := os.Open(filename)
+	fr, err := os.Open(filepath.Clean(filename))
 	if err != nil {
 		return nil, err
 	}
-	defer fr.Close()
-
+	defer func() {
+		if err := fr.Close(); err != nil {
+			logger.Warningf("error closing file: %s\n", err)
+		}
+	}()
 	var infos MountInfoList
 	scanner := bufio.NewScanner(fr)
 	for scanner.Scan() {

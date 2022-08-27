@@ -37,11 +37,11 @@ type Config struct {
 
 func (c *Config) Prepare() error {
 	for _, repo := range c.RepoList {
-		err := os.MkdirAll(repo.StageDir, 0755)
+		err := os.MkdirAll(repo.StageDir, 0750)
 		if err != nil {
 			return err
 		}
-		err = os.MkdirAll(repo.SnapshotDir, 0755)
+		err = os.MkdirAll(repo.SnapshotDir, 0750)
 		if err != nil {
 			return err
 		}
@@ -65,7 +65,7 @@ func (c *Config) Save() error {
 	}
 
 	tmpFile := c.filename + "-" + util.MakeRandomString(util.MinRandomLen)
-	err = ioutil.WriteFile(tmpFile, data, 0640)
+	err = ioutil.WriteFile(tmpFile, data, 0600)
 	if err != nil {
 		return err
 	}

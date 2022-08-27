@@ -22,7 +22,7 @@ func (p Process) Exist() bool {
 
 func (p Process) Cmdline() ([]string, error) {
 	cmdlineFile := p.getFile("cmdline")
-	bytes, err := ioutil.ReadFile(cmdlineFile)
+	bytes, err := ioutil.ReadFile(filepath.Clean(cmdlineFile))
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +51,7 @@ type EnvVars []string
 
 func (p Process) Environ() (EnvVars, error) {
 	envFile := p.getFile("environ")
-	contents, err := ioutil.ReadFile(envFile)
+	contents, err := ioutil.ReadFile(filepath.Clean(envFile))
 	if err != nil {
 		return nil, err
 	}

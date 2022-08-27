@@ -2,9 +2,11 @@ package sha256
 
 import (
 	"crypto/sha256"
+	"deepin-upgrade-manager/pkg/logger"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 )
 
 type SHA256 struct{}
@@ -15,11 +17,15 @@ func (handler *SHA256) Sign(data []byte) ([]byte, error) {
 }
 
 func (handler *SHA256) SignFile(filename string) ([]byte, error) {
-	fr, err := os.Open(filename)
+	fr, err := os.Open(filepath.Clean(filename))
 	if err != nil {
 		return nil, err
 	}
-	defer fr.Close()
+	defer func() {
+		if err := fr.Close(); err != nil {
+			logger.Warningf("error closing file: %s\n", err)
+		}
+	}()s
 
 	// TODO(jouyouyun): sum by chunk
 	var h = sha256.New()

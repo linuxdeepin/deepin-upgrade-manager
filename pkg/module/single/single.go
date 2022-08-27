@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -20,7 +21,7 @@ var (
 )
 
 func SetSingleInstance() bool {
-	_ = os.MkdirAll(SingleInstanceDir, 0755)
+	_ = os.MkdirAll(SingleInstanceDir, 0750)
 	err := write(SingleInstanceDir + SingleInstance)
 	return err != ErrProcessRunning
 }
@@ -54,11 +55,11 @@ func writeControl(filename string, pid int, overwrite bool) error {
 	}
 
 	// We're clear to (over)write the file
-	return ioutil.WriteFile(filename, []byte(fmt.Sprintf("%d\n", pid)), 0644)
+	return ioutil.WriteFile(filename, []byte(fmt.Sprintf("%d\n", pid)), 0600)
 }
 
 func pidfileContents(filename string) (int, error) {
-	contents, err := ioutil.ReadFile(filename)
+	contents, err := ioutil.ReadFile(filepath.Clean(filename))
 	if err != nil {
 		return 0, err
 	}

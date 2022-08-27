@@ -103,7 +103,7 @@ func (repo *OSTree) Snapshot(branchName, dstDir string) error {
 	if !repo.Exist(branchName) {
 		return fmt.Errorf("not found the branchName: %s", branchName)
 	}
-	_ = os.MkdirAll(filepath.Dir(dstDir), 0755)
+	_ = os.MkdirAll(filepath.Dir(dstDir), 0600)
 	_, err := doAction([]string{"checkout", "--repo=" + repo.repoDir,
 		branchName, dstDir})
 	return err
@@ -124,12 +124,12 @@ func (repo *OSTree) Diff(baseBranch, targetBranch, dstFile string) error {
 		return fmt.Errorf("invalid baseBranch(%q) or targetBranch(%q)",
 			baseBranch, targetBranch)
 	}
-	data, err := exec.Command("ostree", "diff", "--repo="+repo.repoDir,
-		baseBranch, targetBranch).CombinedOutput()
+
+	data, err := doAction([]string{"diff", "--repo=" + repo.repoDir, baseBranch, targetBranch})
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(dstFile, data, 0644)
+	return ioutil.WriteFile(dstFile, data, 0600)
 }
 
 func (repo *OSTree) Cat(branchName, filepath, dstFile string) error {
@@ -138,7 +138,7 @@ func (repo *OSTree) Cat(branchName, filepath, dstFile string) error {
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(dstFile, data, 0644)
+	return ioutil.WriteFile(dstFile, data, 0600)
 }
 
 func (repo *OSTree) Previous(targetBranch string) (string, error) {
@@ -180,7 +180,7 @@ func (repo *OSTree) listByName(branchName string) ([]string, error) {
 }
 
 func (repo *OSTree) listRefs() (branch.BranchList, error) {
-	out, err := exec.Command("ostree", "refs", "--repo="+repo.repoDir).CombinedOutput()
+	out, err := doAction([]string{"refs", "--repo=" + repo.repoDir})
 	if err != nil {
 		return nil, fmt.Errorf("%s: %s", err, string(out))
 	}

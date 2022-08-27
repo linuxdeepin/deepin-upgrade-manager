@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"sync"
 )
 
@@ -47,7 +48,7 @@ func (conf *UpgradeConfig) Save() error {
 	}
 
 	dst := conf.filename + "." + util.MakeRandomString(util.MinRandomLen)
-	err = ioutil.WriteFile(dst, data, 0644)
+	err = ioutil.WriteFile(dst, data, 0600)
 	if err != nil {
 		return nil
 	}
@@ -65,13 +66,13 @@ func LoadUpgradeConfig(filename string) (*UpgradeConfig, error) {
 		return &conf, err
 	}
 
-	_ = os.MkdirAll(conf.SnapshotDir, 0755)
-	_ = os.MkdirAll(conf.CacheDir, 0755)
+	_ = os.MkdirAll(conf.SnapshotDir, 0750)
+	_ = os.MkdirAll(conf.CacheDir, 0750)
 	return &conf, nil
 }
 
 func loadFile(info interface{}, filename string) error {
-	content, err := ioutil.ReadFile(filename)
+	content, err := ioutil.ReadFile(filepath.Clean(filename))
 	if err != nil {
 		return err
 	}

@@ -3,6 +3,7 @@ package remote
 import (
 	"bytes"
 	"deepin-upgrade-manager/pkg/config"
+	"deepin-upgrade-manager/pkg/logger"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -177,7 +178,9 @@ func sendRequest(method, url string, info interface{}) ([]byte, int, error) {
 	}
 	if res.Body != nil {
 		data, err = ioutil.ReadAll(res.Body)
-		res.Body.Close()
+		if err := res.Body.Close(); err != nil {
+			logger.Warningf("error closing file: %s\n", err)
+		}
 	}
 
 	return data, res.StatusCode, err

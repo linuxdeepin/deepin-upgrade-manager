@@ -3,12 +3,13 @@ package util
 import (
 	"bufio"
 	"bytes"
-	"crypto/md5"
+	"crypto/md5" // #nosec
 	"crypto/rand"
 	"deepin-upgrade-manager/pkg/logger"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/big"
 	mrand "math/rand"
 	"os"
 	"os/exec"
@@ -92,9 +93,14 @@ func MakeRandomString(num int) string {
 	// fallback
 	var str = "0123456789qwertyuiopasdfghjklzxcvbnm"
 	var length = len(str)
+
 	mrand.Seed(time.Now().Unix())
 	for i := 0; i < num; i++ {
-		data = append(data, str[mrand.Intn(length)])
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(length)))
+		if err != nil {
+			continue
+		}
+		data = append(data, str[n.Int64()])
 	}
 	return string(data)
 }
@@ -430,7 +436,7 @@ func Mkchr(filename string) error {
 	fmode |= syscall.S_IFCHR
 	dev := int((major << 8) | (minor & 0xff) | ((minor & 0xfff00) << 12))
 
-	_ = os.MkdirAll(filepath.Dir(filename), 0755)
+	_ = os.MkdirAll(filepath.Dir(filename), 0750)
 	return syscall.Mknod(filename, uint32(fmode), dev)
 }
 
@@ -658,12 +664,17 @@ func IsFileSameByMD5(file1, file2 string) (bool, error) {
 }
 
 func SumFileMD5(filename string) (string, error) {
-	f, err := os.Open(filename)
+	f, err := os.Open(filepath.Clean(filename))
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
-	h := md5.New()
+	defer func() {
+		if err := f.Close(); err != nil {
+			logger.Warningf("error closing file: %s\n", err)
+		}
+	}()
+
+	h := md5.New() // #nosec
 	_, err = io.Copy(h, f)
 	if err != nil {
 		return "", err
@@ -825,7 +836,11 @@ func GetOSInfo(keyname string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer fh.Close()
+	defer func() {
+		if err := fh.Close(); err != nil {
+			logger.Warningf("error closing file: %s\n", err)
+		}
+	}()
 	// Parse line by line
 	scanner := bufio.NewScanner(fh)
 	for scanner.Scan() {

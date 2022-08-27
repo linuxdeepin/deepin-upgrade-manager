@@ -43,7 +43,7 @@ func LoadToolConfig(dir string) (ToolConfigList, error) {
 		if fi.IsDir() {
 			continue
 		}
-		content, err := ioutil.ReadFile(filepath.Join(dir, fi.Name()))
+		content, err := ioutil.ReadFile(filepath.Clean(filepath.Join(dir, fi.Name())))
 		if err != nil {
 			continue
 		}

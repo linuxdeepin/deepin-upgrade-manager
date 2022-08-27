@@ -21,7 +21,7 @@ const (
 
 var (
 	_config = flag.String("config", "/usr/share/deepin-boot-kit/config.json", "the configuration file path")
-	_action = flag.String("action", "list", "the available actions: version, list, update")
+	_action = flag.String("action", "list", "the available actions: version, list, update, mkgrub, mkinitrd")
 )
 
 func main() {

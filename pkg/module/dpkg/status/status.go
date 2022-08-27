@@ -3,8 +3,10 @@ package status
 
 import (
 	"bufio"
+	"deepin-upgrade-manager/pkg/logger"
 	"deepin-upgrade-manager/pkg/module/util"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 )
@@ -80,11 +82,15 @@ func MergeStatusList(srcFile string, list PackageStatusList) (PackageStatusList,
 }
 
 func GetStatusList(filename string) (PackageStatusList, error) {
-	fr, err := os.Open(filename)
+	fr, err := os.Open(filepath.Clean(filename))
 	if err != nil {
 		return nil, err
 	}
-	defer fr.Close()
+	defer func() {
+		if err := fr.Close(); err != nil {
+			logger.Warningf("error closing file: %s\n", err)
+		}
+	}()
 
 	var statusList PackageStatusList
 	scanner := bufio.NewScanner(fr)
@@ -126,12 +132,15 @@ func (list PackageStatusList) ListPackage() []string {
 
 func (list PackageStatusList) Save(filename string) error {
 	tmpFile := filename + "-" + util.MakeRandomString(util.MinRandomLen)
-	fw, err := os.OpenFile(tmpFile, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0644)
+	fw, err := os.OpenFile(filepath.Clean(tmpFile), os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0600)
 	if err != nil {
 		return err
 	}
-	defer fw.Close()
-
+	defer func() {
+		if err := fw.Close(); err != nil {
+			logger.Warningf("error closing file: %s\n", err)
+		}
+	}()
 	for _, info := range list {
 		_, err = fw.Write(info.Bytes())
 		if err != nil {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 )
 
 type KitConfig struct {
@@ -31,7 +32,7 @@ func (c *BootConfig) BootPrepare() error {
 
 func BootloadFile(infos *BootConfig, dirpath string) error {
 	infos.filename = dirpath
-	content, err := ioutil.ReadFile(dirpath)
+	content, err := ioutil.ReadFile(filepath.Clean(dirpath))
 	if err != nil {
 		return nil
 	}

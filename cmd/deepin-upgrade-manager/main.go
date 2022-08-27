@@ -27,6 +27,7 @@ const (
 	_ACTION_LIST     = "list"
 	_ACTION_DELETE   = "delete"
 	_ACTION_SUBJECT  = "subject"
+	_ACTION_CANCEL   = "cancel"
 )
 
 const (
@@ -36,7 +37,7 @@ const (
 
 var (
 	_config  = flag.String("config", "/etc/deepin-upgrade-manager/config.json", "the configuration file path")
-	_action  = flag.String("action", "list", "the available actions: init, commit, rollback, list")
+	_action  = flag.String("action", "list", "the available actions: init, commit, rollback, list, cancel")
 	_version = flag.String("version", "", "the version which rollback")
 	_rootDir = flag.String("root", "/", "the rootfs mount point")
 	_daemon  = flag.Bool("daemon", false, "start dbus service")
@@ -133,6 +134,10 @@ func handleAction(m *upgrader.Upgrader, c *config.Config) {
 			os.Exit(int(exCode))
 		}
 	case _ACTION_BOOTLIST:
+		if !single.SetSingleInstance() {
+			logger.Error("process already exists")
+			os.Exit(FAILED_PROCESS_EXISTS)
+		}
 		versionInfo, exCode, err := m.EnableBootList()
 		if err != nil {
 			logger.Error("failed enable boot list, err:", err)
@@ -148,6 +153,10 @@ func handleAction(m *upgrader.Upgrader, c *config.Config) {
 		fmt.Printf("ActiveVersion:%s\n", c.ActiveVersion)
 		fmt.Printf("AvailVersionList:%s\n", strings.Join(verList, " "))
 	case _ACTION_DELETE:
+		if !single.SetSingleInstance() {
+			logger.Error("process already exists")
+			os.Exit(FAILED_PROCESS_EXISTS)
+		}
 		exitCode, err := m.Delete(*_version, nil)
 		if err != nil {
 			logger.Error("failed delete version:", err)
@@ -164,6 +173,12 @@ func handleAction(m *upgrader.Upgrader, c *config.Config) {
 			os.Exit(FAILED_VERSION_EXISTS)
 		}
 		fmt.Println(sub)
+	case _ACTION_CANCEL:
+		if !single.SetSingleInstance() {
+			logger.Error("process already exists")
+			os.Exit(FAILED_PROCESS_EXISTS)
+		}
+		m.ResetGrub(util.LocalLangEnv())
 	}
 }
 

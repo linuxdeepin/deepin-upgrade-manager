@@ -80,7 +80,7 @@ func (fs *Rootfs) symlinkDirList() error {
 	list := getSymlinkDirList(fs.rootMP)
 	for _, v := range list {
 		dir := filepath.Join(fs.RootDir, usrName, v)
-		err := os.MkdirAll(dir, 0755)
+		err := os.MkdirAll(dir, 0750)
 		if err != nil {
 			return err
 		}

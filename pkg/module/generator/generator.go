@@ -1,6 +1,7 @@
 package generator
 
 import (
+	"deepin-upgrade-manager/pkg/logger"
 	"deepin-upgrade-manager/pkg/module/repo/branch"
 	"deepin-upgrade-manager/pkg/module/util"
 	"fmt"
@@ -31,7 +32,7 @@ func (list *ListManager) Save() error {
 		}
 		data = data + v + "\n"
 	}
-	err := ioutil.WriteFile(list.Path, []byte(data), 0644)
+	err := ioutil.WriteFile(list.Path, []byte(data), 0600)
 	if err != nil {
 		return err
 	}
@@ -81,11 +82,16 @@ func Sort(list []string) []string {
 
 func readList(localPath string) ([]string, error) {
 	var versions []string
-	file, err := os.Open(localPath)
+	file, err := os.Open(filepath.Clean(localPath))
 	if err != nil {
 		return versions, err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			logger.Warningf("error closing file: %s\n", err)
+		}
+	}()
+
 	content, err := ioutil.ReadAll(file)
 	if err != nil {
 		return versions, err

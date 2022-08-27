@@ -83,11 +83,15 @@ func parseOptions(optionsString string) (options map[string]string) {
 // /etc/fstab
 func Load(filename, rootDir string) (FsInfoList, error) {
 	logger.Debugf("load file %s to get mount information", filename)
-	fr, err := os.Open(filename)
+	fr, err := os.Open(filepath.Clean(filename))
 	if err != nil {
 		return nil, err
 	}
-	defer fr.Close()
+	defer func() {
+		if err := fr.Close(); err != nil {
+			logger.Warningf("error closing file: %s\n", err)
+		}
+	}()
 	var infos FsInfoList
 	dsInfos, err := diskinfo.Load("/dev/disk")
 	if err != nil {

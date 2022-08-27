@@ -57,7 +57,7 @@ func toRecoredState(state int) RecoredState {
 }
 
 func readFile(recordsfile string, info interface{}) error {
-	content, err := ioutil.ReadFile(recordsfile)
+	content, err := ioutil.ReadFile(filepath.Clean(recordsfile))
 	if err != nil {
 		return err
 	}
@@ -93,8 +93,8 @@ func (info *RecordsInfo) save() error {
 		return err
 	}
 	tmpFile := info.filename + "-" + util.MakeRandomString(util.MinRandomLen)
-
-	f, err := os.OpenFile(tmpFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	// deepin-upgrade-manager-tool need load file
+	f, err := os.OpenFile(filepath.Clean(tmpFile), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600|0064)
 	if err != nil {
 		return err
 	}

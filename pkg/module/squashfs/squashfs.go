@@ -17,7 +17,7 @@ func Mkfs(dataDir, filename string) error {
 }
 
 func Mount(filename, dstDir string) error {
-	_ = os.MkdirAll(filepath.Dir(dstDir), 0755)
+	_ = os.MkdirAll(filepath.Dir(dstDir), 0750)
 	out, err := exec.Command("mount", "-t", "squashfs", "-o", "loop",
 		filename, dstDir).CombinedOutput()
 	if err != nil {

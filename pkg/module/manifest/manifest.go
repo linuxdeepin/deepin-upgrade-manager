@@ -89,7 +89,7 @@ func (info *Manifest) Verify(dir string, signer signature.Signature) error {
 }
 
 func LoadFile(info interface{}, filename string) error {
-	content, err := ioutil.ReadFile(filename)
+	content, err := ioutil.ReadFile(filepath.Clean(filename))
 	if err != nil {
 		return err
 	}
