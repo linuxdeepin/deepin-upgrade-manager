@@ -77,6 +77,9 @@ install-upgrader:
 	@mkdir -p ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom
 	@cp -f ${PWD}/cmd/initramfs-scripts/${PROG_UPGRADER} ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom/
 
+	@mkdir -p ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/local-bottom
+	@cp -f ${PWD}/cmd/initramfs-scripts/${PROG_UPGRADER}-partition-mount ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/local-bottom/
+
 install-upgrader-tool:
 	install -d ${DESTDIR}${PREFIX}/share/locale
 	@cp -rv ${PWD}/out/locale/deepin-upgrade-manager/* ${DESTDIR}${PREFIX}/share/locale
@@ -141,6 +144,8 @@ uninstall-upgrader:
 	@rm -f ${DESTDIR}${PREFIX}/share/initramfs-tools/hooks/${PROG_UPGRADER}
 	@rm -f ${DESTDIR}${VAR}/${PROG_UPGRADER}/scripts/${PROG_UPGRADER}
 	@rm -f ${DESTDIR}${VAR}/${PROG_BOOTKIT}/config/atomic.json
+	@rm -f ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/local-bottom/${PROG_UPGRADER}
+	@rm -f ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/local-bottom/${PROG_UPGRADER}-partition-mount
 
 uninstall-upgrader-tool:
 	@rm -f ${DESTDIR}${PREFIX}/bin/${PROG_UPGRADER_TOOL}

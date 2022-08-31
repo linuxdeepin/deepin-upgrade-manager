@@ -134,10 +134,6 @@ func handleAction(m *upgrader.Upgrader, c *config.Config) {
 			os.Exit(int(exCode))
 		}
 	case _ACTION_BOOTLIST:
-		if !single.SetSingleInstance() {
-			logger.Error("process already exists")
-			os.Exit(FAILED_PROCESS_EXISTS)
-		}
 		versionInfo, exCode, err := m.EnableBootList()
 		if err != nil {
 			logger.Error("failed enable boot list, err:", err)

@@ -89,7 +89,7 @@ func Load(filename, rootDir string) (FsInfoList, error) {
 	}
 	defer func() {
 		if err := fr.Close(); err != nil {
-			logger.Warningf("error closing file: %s\n", err)
+			logger.Warningf("error closing file: %v", err)
 		}
 	}()
 	var infos FsInfoList
@@ -122,7 +122,7 @@ func Load(filename, rootDir string) (FsInfoList, error) {
 				srcMountPoint, err = getPartiton(items[0], dsInfos)
 				if err != nil {
 					logger.Warning("failed get mount point, err:", err)
-					continue
+					return infos, err
 				}
 				isBind = false
 			}

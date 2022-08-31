@@ -22,6 +22,18 @@ atomic_upgrade_config=${rootmnt}/etc/deepin-upgrade-manager/config.json
 atomic_upgrade_records=${rootmnt}/etc/deepin-upgrade-manager/state.records
 repo_records_point_key=repo_mount_point
 
+for x in $(cat /proc/cmdline); do
+	case $x in
+	# The following lines blocked for security reason
+	back_version=*)
+		back_version=${x#back_version=}
+		;;
+	esac
+done
+
+if [[ "x${back_version}" != "x" ]];then
+	exit 0
+fi
 
 repo_mount_point=
 if test -e ${atomic_upgrade_config}; then

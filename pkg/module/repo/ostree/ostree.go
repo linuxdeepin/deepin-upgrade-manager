@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -276,7 +275,7 @@ func (repo *OSTree) CommitTime(branchName string) (string, error) {
 }
 
 func doAction(args []string) ([]byte, error) {
-	out, err := exec.Command("ostree", args...).CombinedOutput()
+	out, err := util.ExecCommandWithOut("ostree", args)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %s", err, string(out))
 	}

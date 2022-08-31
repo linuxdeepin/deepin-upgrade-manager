@@ -43,7 +43,7 @@ func (list MountPointList) Umount() error {
 		}
 		items = append(items, mp.Dest)
 	}
-	args := []string{"-R"}
+	var args []string
 	args = append(args, items...)
 	logger.Info("Will umount:", args)
 	return util.ExecCommand(_CMD_UMOUNT, args)
@@ -69,7 +69,7 @@ func (mp *MountPoint) Mount() error {
 }
 
 func (mp *MountPoint) Umount() error {
-	return util.ExecCommand(_CMD_UMOUNT, []string{"-R", mp.Dest})
+	return util.ExecCommand(_CMD_UMOUNT, []string{mp.Dest})
 }
 
 func isInListByPrefix(item string, list []string) bool {

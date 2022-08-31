@@ -88,7 +88,7 @@ func GetStatusList(filename string) (PackageStatusList, error) {
 	}
 	defer func() {
 		if err := fr.Close(); err != nil {
-			logger.Warningf("error closing file: %s\n", err)
+			logger.Warningf("error closing file: %v", err)
 		}
 	}()
 
@@ -138,7 +138,7 @@ func (list PackageStatusList) Save(filename string) error {
 	}
 	defer func() {
 		if err := fw.Close(); err != nil {
-			logger.Warningf("error closing file: %s\n", err)
+			logger.Warningf("error closing file: %v", err)
 		}
 	}()
 	for _, info := range list {

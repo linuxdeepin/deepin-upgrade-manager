@@ -88,7 +88,7 @@ func readList(localPath string) ([]string, error) {
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			logger.Warningf("error closing file: %s\n", err)
+			logger.Warningf("error closing file: %v", err)
 		}
 	}()
 

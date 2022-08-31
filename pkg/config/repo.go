@@ -1,12 +1,15 @@
 package config
 
 import (
+	"deepin-upgrade-manager/pkg/logger"
 	"deepin-upgrade-manager/pkg/module/util"
 	"encoding/json"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 type RepoConfig struct {
@@ -22,6 +25,7 @@ type RepoListConfig []*RepoConfig
 
 type Config struct {
 	filename string
+	locker   sync.RWMutex
 
 	Version       string `json:"config_version"`
 	Distribution  string `json:"distribution"`
@@ -59,6 +63,8 @@ func (c *Config) GetRepoConfig(repoDir string) *RepoConfig {
 }
 
 func (c *Config) Save() error {
+	c.locker.RLock()
+	defer c.locker.RUnlock()
 	data, err := json.Marshal(c)
 	if err != nil {
 		return err
@@ -69,7 +75,28 @@ func (c *Config) Save() error {
 	if err != nil {
 		return err
 	}
+
+	f, err := os.OpenFile(filepath.Clean(tmpFile), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600|0064)
+	if err != nil {
+		return err
+	}
+	n, err := f.Write(data)
+	if err == nil && n < len(data) {
+		err = io.ErrShortWrite
+	}
+	if err == nil {
+		err = f.Sync()
+	}
+	if err1 := f.Close(); err == nil {
+		err = err1
+	}
+
+	if err != nil {
+		logger.Warning("failed save the repo info, err:", err)
+	}
+
 	_, err = util.Move(c.filename, tmpFile, true)
+
 	return err
 }
 

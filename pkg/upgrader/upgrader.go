@@ -295,7 +295,6 @@ func (c *Upgrader) Commit(newVersion, subject string, useSysData bool, envVars [
 	// prevent another update grub
 	if !isClean {
 		c.SendingSignal(evHandler, _OP_TY_COMMIT_GRUB_UPDATE, _STATE_TY_RUNING, newVersion, "")
-
 		exitCode, err = c.UpdateGrub(envVars)
 		if err != nil {
 			exitCode = _STATE_TY_FAILED_UPDATE_GRUB
@@ -339,6 +338,7 @@ func (c *Upgrader) UpdateGrub(envVars []string) (stateType, error) {
 	_, err := cmd.Output()
 	if err != nil {
 		exitCode = _STATE_TY_FAILED_UPDATE_GRUB
+		logger.Warning(err)
 	}
 	cmd.Wait()
 	return exitCode, err
@@ -427,11 +427,7 @@ func (c *Upgrader) UpdataMount(repoConf *config.RepoConfig, version string) (mou
 	dataDir := filepath.Join(c.rootMP, repoConf.SnapshotDir, version)
 	mountedPointList, err := c.updataLoaclMount(dataDir)
 	if err != nil {
-		logger.Warning("the fstab file does not exist in the snapshot, read the local fstabl.")
-		mountedPointList, err = c.updataLoaclMount("/")
-		if err != nil {
-			return mountedPointList, err
-		}
+		return mountedPointList, err
 	}
 	// need to get mount information again
 	mountinfos, err := mountinfo.Load(SelfMountPath)
@@ -523,9 +519,14 @@ func (c *Upgrader) Rollback(version string,
 		c.SaveActiveVersion(backVersion)
 		// restore mount points under initramfs and save action version
 		if len(c.rootMP) != 1 {
+			var needUmountList []string
 			for _, v := range mountedPointList {
-				err = util.ExecCommand("umount", []string{v.Dest})
-				logger.Info("restore system mount, will umount:", v.Dest)
+				needUmountList = append(needUmountList, v.Dest)
+			}
+			needUmountList = util.SortSubDir(needUmountList)
+			for _, v := range needUmountList {
+				err = util.ExecCommand("umount", []string{v})
+				logger.Info("restore system mount, will umount:", v)
 				if err != nil {
 					logger.Warning("failed umount, err:", err)
 				}
@@ -533,14 +534,15 @@ func (c *Upgrader) Rollback(version string,
 		}
 	} else {
 		c.SendingSignal(evHandler, _OP_TY_ROLLBACK_PREPARING_SET_WAITTIME, _STATE_TY_RUNING, version, "")
-		err := grub.SetTimeout(0)
-		if err != nil {
-			logger.Warning("failed set the rollback waiting time")
-		} else {
-			time.Sleep(1 * time.Second) // wait for grub set out time
-			grub.Join()
+		if len(c.rootMP) == 1 {
+			err := grub.SetTimeout(0)
+			if err != nil {
+				logger.Warningf("failed set the rollback waiting time, err:%v", err)
+			} else {
+				time.Sleep(1 * time.Second) // wait for grub set out time
+				grub.Join()
+			}
 		}
-
 		logger.Info("start set rollback a old version:", backVersion)
 	}
 	c.SendingSignal(evHandler, _OP_TY_ROLLBACK_PREPARING_END, _STATE_TY_SUCCESS, version, "")
@@ -891,21 +893,22 @@ func (c *Upgrader) updataLoaclMount(snapDir string) (mountpoint.MountPointList, 
 			logger.Debugf("ignore mount point %s", info.DestPoint)
 			continue
 		}
-		logger.Debugf("bind:%v,SrcPoint:%v,DestPoint:%v", info.Bind, info.SrcPoint, info.DestPoint)
-		m := c.mountInfos.Match(info.DestPoint)
+		logger.Debugf("bind:%v,SrcPoint:%v,DestPoint:%v", info.Bind,
+			info.SrcPoint, filepath.Clean(filepath.Join(c.rootMP, info.DestPoint)))
+		m := c.mountInfos.Match(filepath.Clean(filepath.Join(c.rootMP, info.DestPoint)))
 		if m != nil && !info.Bind {
 			if m.Partition != info.SrcPoint {
-				mp := filepath.Join(c.rootMP, m.MountPoint)
-				logger.Infof("the %s is not mounted correctly and needs to be unmouted", mp)
+				logger.Infof("the %s is mounted %s, not mounted correctly and needs to be unmouted",
+					m.Partition, m.MountPoint)
 				newInfo := &mountpoint.MountPoint{
 					Src:     m.Partition,
-					Dest:    mp,
+					Dest:    m.MountPoint,
 					FSType:  m.FSType,
 					Options: m.Options,
 				}
 				err := newInfo.Umount()
 				if err != nil {
-					return mountedPointList, err
+					continue
 				}
 				err = os.RemoveAll(newInfo.Dest)
 				if err != nil {

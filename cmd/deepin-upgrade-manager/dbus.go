@@ -90,7 +90,7 @@ func (m *Manager) makeProps() map[string]map[string]*prop.Prop {
 
 func (m *Manager) Quit() {
 	if err := m.conn.Close(); err != nil {
-		logger.Warningf("error closing file: %s\n", err)
+		logger.Warningf("error closing file: %v", err)
 	}
 	close(m.quit)
 }

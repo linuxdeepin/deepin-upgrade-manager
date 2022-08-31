@@ -23,9 +23,9 @@ func (handler *SHA256) SignFile(filename string) ([]byte, error) {
 	}
 	defer func() {
 		if err := fr.Close(); err != nil {
-			logger.Warningf("error closing file: %s\n", err)
+			logger.Warningf("error closing file: %v", err)
 		}
-	}()s
+	}()
 
 	// TODO(jouyouyun): sum by chunk
 	var h = sha256.New()

@@ -140,11 +140,12 @@ func (b *Bootkit) GenerateGrubMenu(menu, linux, initrd, grubcmdlinelinux, grubcm
 	menus = append(menus, linuxMessage)
 
 	linuxDir := linux + ".efi.signed"
+	linuxRoot := os.Getenv("LINUX_ROOT_DEVICE")
 	if util.IsExists("/sys/firmware/efi") && util.IsExists(linuxDir) {
-		linuxCmd := fmt.Sprintf("	linux %s root=%s ro %s", linuxDir, UUID, arg)
+		linuxCmd := fmt.Sprintf("	linux %s root=%s ro %s", linuxDir, linuxRoot, arg)
 		menus = append(menus, linuxCmd)
 	} else {
-		linuxCmd := fmt.Sprintf("	linux %s root=UUID=%s ro %s", linux, UUID, arg)
+		linuxCmd := fmt.Sprintf("	linux %s root=%s ro %s", linux, linuxRoot, arg)
 		menus = append(menus, linuxCmd)
 	}
 

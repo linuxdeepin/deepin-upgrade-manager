@@ -82,7 +82,7 @@ func Load(filename string) (MountInfoList, error) {
 	}
 	defer func() {
 		if err := fr.Close(); err != nil {
-			logger.Warningf("error closing file: %s\n", err)
+			logger.Warningf("error closing file: %v", err)
 		}
 	}()
 	var infos MountInfoList

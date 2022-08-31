@@ -6,6 +6,7 @@ import (
 	"crypto/md5" // #nosec
 	"crypto/rand"
 	"deepin-upgrade-manager/pkg/logger"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -105,28 +106,45 @@ func MakeRandomString(num int) string {
 	return string(data)
 }
 
-func execC(action string, args []string) (io.ReadCloser, *exec.Cmd, error) {
-	var cmd *exec.Cmd
+func execC(action string, args []string) (stdout io.ReadCloser, stderr io.ReadCloser, cmd *exec.Cmd, err error) {
+
 	if len(args) != 0 {
 		cmd = exec.Command(action, args...)
 	} else {
 		cmd = exec.Command(action, nil...)
 	}
-	stdout, err := cmd.StdoutPipe()
-	cmd.Stderr = cmd.Stdout
+	stdout, err = cmd.StdoutPipe()
 	if err != nil {
-		return nil, cmd, err
+		return
+	}
+	stderr, err = cmd.StderrPipe()
+	if err != nil {
+		return
 	}
 	err = cmd.Start()
 	if err != nil {
-		return nil, cmd, err
+		return
 	}
-	return stdout, cmd, nil
+	return
+}
+
+func ClearByteZero(in []byte) (out []byte) {
+	if len(in) == 0 {
+		return
+	}
+
+	for _, v := range in {
+		if v != 0 {
+			out = append(out, v)
+		}
+	}
+	return
 }
 
 func ExecCommandWithOut(action string, args []string) ([]byte, error) {
 	var out []byte
-	stdout, cmd, err := execC(action, args)
+	var errout []byte
+	stdout, stderr, cmd, err := execC(action, args)
 	if err != nil {
 		return out, err
 	}
@@ -141,18 +159,28 @@ func ExecCommandWithOut(action string, args []string) ([]byte, error) {
 		buffer.Write(buf)
 		out = buffer.Bytes()
 	}
-	var str_buf []byte
-	for _, v := range out {
-		if v != 0 {
-			str_buf = append(str_buf, v)
+	for {
+		var buffer bytes.Buffer
+		buf := make([]byte, 1024)
+		_, err = stderr.Read(buf)
+		if err != nil {
+			break
 		}
+		buffer.Write(errout)
+		buffer.Write(buf)
+		errout = buffer.Bytes()
 	}
 	cmd.Wait()
-	return str_buf, nil
+	errout = ClearByteZero(errout)
+	if len(errout) != 0 {
+		return out, errors.New(string(errout))
+	}
+	return ClearByteZero(out), nil
 }
 
 func ExecCommand(action string, args []string) error {
-	stdout, cmd, err := execC(action, args)
+	var errout []byte
+	stdout, stderr, cmd, err := execC(action, args)
 	if err != nil {
 		return err
 	}
@@ -163,7 +191,22 @@ func ExecCommand(action string, args []string) error {
 			break
 		}
 	}
+	for {
+		var buffer bytes.Buffer
+		buf := make([]byte, 1024)
+		_, err = stderr.Read(buf)
+		if err != nil {
+			break
+		}
+		buffer.Write(errout)
+		buffer.Write(buf)
+		errout = buffer.Bytes()
+	}
 	cmd.Wait()
+	errout = ClearByteZero(errout)
+	if len(errout) != 0 {
+		return errors.New(string(errout))
+	}
 	return nil
 }
 
@@ -670,7 +713,7 @@ func SumFileMD5(filename string) (string, error) {
 	}
 	defer func() {
 		if err := f.Close(); err != nil {
-			logger.Warningf("error closing file: %s\n", err)
+			logger.Warningf("error closing file: %v", err)
 		}
 	}()
 
@@ -838,7 +881,7 @@ func GetOSInfo(keyname string) (string, error) {
 	}
 	defer func() {
 		if err := fh.Close(); err != nil {
-			logger.Warningf("error closing file: %s\n", err)
+			logger.Warningf("error closing file: %v", err)
 		}
 	}()
 	// Parse line by line
@@ -972,4 +1015,21 @@ func VersionOrdinal(version string) string {
 		vo[j]++
 	}
 	return string(vo)
+}
+
+func SortSubDir(dirs []string) []string {
+	if len(dirs) == 0 {
+		return dirs
+	}
+
+	for i, v1 := range dirs {
+		for j, v2 := range dirs {
+			if strings.HasPrefix(v1, v2) {
+				tmp := dirs[i]
+				dirs[i] = dirs[j]
+				dirs[j] = tmp
+			}
+		}
+	}
+	return dirs
 }

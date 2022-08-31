@@ -26,6 +26,11 @@ for x in $(cat /proc/cmdline); do
 	esac
 done
 
+if [[ "x${back_version}" = "x" ]];then
+	exit 0
+fi
+
+
 atomic_upgrade_config=${rootmnt}/etc/deepin-upgrade-manager/config.json
 
 repo_mount=n

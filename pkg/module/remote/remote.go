@@ -179,7 +179,7 @@ func sendRequest(method, url string, info interface{}) ([]byte, int, error) {
 	if res.Body != nil {
 		data, err = ioutil.ReadAll(res.Body)
 		if err := res.Body.Close(); err != nil {
-			logger.Warningf("error closing file: %s\n", err)
+			logger.Warningf("error closing file: %v", err)
 		}
 	}
 
