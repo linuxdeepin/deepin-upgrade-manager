@@ -1,5 +1,5 @@
 {
-  "config_version": "1.0.8",
+  "config_version": "1.0.9",
   "distribution": "v23",
   "active_version": "20220210",
   "cache_dir": "/usr/.osrepo-cache",
