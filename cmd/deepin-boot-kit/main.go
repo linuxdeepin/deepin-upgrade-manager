@@ -12,16 +12,16 @@ import (
 )
 
 const (
-	_ACTION_LIST     = "list"
-	_ACTION_UPDATE   = "update"
-	_ACTION_VERSION  = "version"
-	_ACTION_MKGRUB   = "mkgrub"
-	_ACTION_MKINITRD = "mkinitrd"
+	_ACTION_LIST         = "list"
+	_ACTION_UPDATE       = "update"
+	_ACTION_VERSION      = "version"
+	_ACTION_MKGRUBCONFIG = "mkgrubconfig"
+	_ACTION_MKINITRD     = "mkinitrd"
 )
 
 var (
 	_config = flag.String("config", "/usr/share/deepin-boot-kit/config.json", "the configuration file path")
-	_action = flag.String("action", "list", "the available actions: version, list, update, mkgrub, mkinitrd")
+	_action = flag.String("action", "list", "the available actions: version, list, update, mkgrubconfig, mkinitrd")
 )
 
 func main() {
@@ -72,11 +72,17 @@ func handleAction(m *bootkit.Bootkit, c *config.BootConfig) {
 		if err != nil {
 			os.Exit(-1)
 		}
-	case _ACTION_MKGRUB:
+	case _ACTION_MKGRUBCONFIG:
 		m.InitVersionInfo()
 		out := m.GenerateDefaultGrub()
 		fmt.Println(out)
 	case _ACTION_MKINITRD:
-		m.CopyToolScripts()
+		needUpdate := os.Getenv("INITRAMFS_UPDATE")
+		if needUpdate == "n" {
+			m.CopyToolScripts()
+		} else {
+			m.UpdateInitramfs()
+		}
+
 	}
 }

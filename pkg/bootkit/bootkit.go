@@ -82,6 +82,12 @@ func (b *Bootkit) UpdateGrub() error {
 	return err
 }
 
+func (b *Bootkit) UpdateInitramfs() error {
+	logger.Info("start update initramfs")
+	err := util.ExecCommand(" update-initramfs", []string{"-u"})
+	return err
+}
+
 func (b *Bootkit) GetScriptDirList() []string {
 	var scriptsList []string
 	for _, info := range b.toolConfig {

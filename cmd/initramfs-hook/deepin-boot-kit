@@ -19,6 +19,10 @@ esac
 TOOL_SCRIPT="/var/lib/deepin-boot-kit/scripts"
 BOOTKIT="/usr/share/bootkit"
 
+export INITRAMFS_UPDATE=n
+
 /usr/sbin/deepin-boot-kit --action=mkinitrd || true
 mkdir -p "${DESTDIR}/${BOOTKIT}" 2>/dev/null
 cp -r "$TOOL_SCRIPT" "${DESTDIR}/$BOOTKIT" 2>/dev/null
+
+INITRAMFS_UPDATE=

@@ -41,7 +41,7 @@ else
   LINUX_ROOT_DEVICE=UUID=${GRUB_DEVICE_UUID}
 fi
 
-grub="$(/usr/sbin/deepin-boot-kit --action=mkgrub)"
+grub="$(/usr/sbin/deepin-boot-kit --action=mkgrubconfig)"
 echo "${grub}"
 BOOT_KIT_PREPARE=
 LINUX_ROOT_DEVICE=
