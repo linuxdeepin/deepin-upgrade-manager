@@ -535,12 +535,13 @@ func (c *Upgrader) Rollback(version string,
 	} else {
 		c.SendingSignal(evHandler, _OP_TY_ROLLBACK_PREPARING_SET_WAITTIME, _STATE_TY_RUNING, version, "")
 		if len(c.rootMP) == 1 {
-			err := grub.SetTimeout(0)
+			grubManager := grub.Init()
+			err := grubManager.SetTimeout(0)
 			if err != nil {
 				logger.Warningf("failed set the rollback waiting time, err:%v", err)
 			} else {
 				time.Sleep(1 * time.Second) // wait for grub set out time
-				grub.Join()
+				grubManager.Join()
 			}
 		}
 		logger.Info("start set rollback a old version:", backVersion)

@@ -174,7 +174,8 @@ func (b *Bootkit) GenerateDefaultGrub() string {
 		return ""
 	}
 	var usersLine string
-	encryptedUsers, err := grub.GetEnabledUsers()
+	grubManager := grub.Init()
+	encryptedUsers, err := grubManager.GetEnabledUsers()
 	if nil == err && len(encryptedUsers) != 0 {
 		usersLine = fmt.Sprintf("--users %s ", strings.Join(encryptedUsers, " "))
 	}

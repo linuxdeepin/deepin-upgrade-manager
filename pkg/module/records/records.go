@@ -33,8 +33,9 @@ type RecordsInfo struct {
 	RollbackVersion string       `json:"RollbackVersion"`
 	TimeOut         uint32       `json:"GrubTimeout"`
 
-	filename string
-	locker   sync.RWMutex
+	filename    string
+	locker      sync.RWMutex
+	grubManager *grub.GrubManager
 }
 
 func toRecoredState(state int) RecoredState {
@@ -82,6 +83,7 @@ func LoadRecords(rootfs, recordsfile string) *RecordsInfo {
 		dir := filepath.Dir(path)
 		_ = os.MkdirAll(dir, 0644)
 	}
+	info.grubManager = grub.Init()
 	return &info
 }
 
@@ -149,7 +151,7 @@ func (info *RecordsInfo) SetRollbackInfo(version, rootdir string) {
 	defer info.save()
 
 	if len(rootdir) == 1 {
-		out, err := grub.TimeOut()
+		out, err := info.grubManager.TimeOut()
 		if err != nil && out != 0 {
 			logger.Warning("failed get grub out time")
 			info.TimeOut = out
@@ -207,15 +209,16 @@ func (info *RecordsInfo) Remove() {
 
 func (info *RecordsInfo) ResetState(envVars []string) {
 	if len(info.RollbackVersion) != 0 {
-		currTimeOut, _ := grub.TimeOut()
+
+		currTimeOut, _ := info.grubManager.TimeOut()
 
 		if info.TimeOut != 0 && currTimeOut != info.TimeOut {
-			err := grub.SetTimeout(info.TimeOut)
+			err := info.grubManager.SetTimeout(info.TimeOut)
 			if err != nil {
 				logger.Warning("failed set the rollback waiting time")
 			} else {
 				time.Sleep(1 * time.Second) // wait for grub set out time
-				grub.Join()
+				info.grubManager.Join()
 			}
 		}
 		// Compatible with many languages
@@ -225,6 +228,7 @@ func (info *RecordsInfo) ResetState(envVars []string) {
 		cmd := exec.Command("update-grub")
 		cmd.Env = append(cmd.Env, envVars...)
 		_ = cmd.Start()
+		cmd.Wait()
 		if err != nil {
 			logger.Warning(err)
 		} else {

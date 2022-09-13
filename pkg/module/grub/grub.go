@@ -1,34 +1,53 @@
 package grub
 
 import (
+	"deepin-upgrade-manager/pkg/logger"
+	"deepin-upgrade-manager/pkg/module/util"
 	"time"
 
 	"github.com/godbus/dbus"
 )
 
-const (
-	dbusDest      = "com.deepin.daemon.Grub2"
-	dbusPath      = "/com/deepin/daemon/Grub2"
-	dbusInterface = dbusDest
-)
+type GrubManager struct {
+	dbusDest              string
+	dbusPath              dbus.ObjectPath
+	dbusInterface         string
+	editAuthDBusPath      dbus.ObjectPath
+	editAuthDBusInterface string
+}
 
-const (
-	editAuthDBusPath      = dbusPath + "/EditAuthentication"
-	editAuthDBusInterface = dbusInterface + ".EditAuthentication"
-)
-
-func Join() error {
+func Init() *GrubManager {
+	var m GrubManager
+	osVersion, err := util.GetOSInfo("MajorVersion")
+	if nil != err {
+		logger.Warning("failed get new version, err:", err)
+	}
+	// default version is  v23
+	if len(osVersion) == 0 || osVersion == "23" {
+		m.dbusDest = "org.deepin.daemon.Grub2"
+		m.dbusPath = "/org/deepin/daemon/Grub2"
+		m.dbusInterface = m.dbusDest
+	} else {
+		m.dbusDest = "com.deepin.daemon.Grub2"
+		m.dbusPath = "/com/deepin/daemon/Grub2"
+		m.dbusInterface = m.dbusDest
+	}
+	m.editAuthDBusPath = m.dbusPath + "/EditAuthentication"
+	m.editAuthDBusInterface = m.dbusInterface + ".EditAuthentication"
+	return &m
+}
+func (m *GrubManager) Join() error {
 	ch := make(chan bool)
 	go func(ch chan bool) {
 		for {
 			time.Sleep(100 * time.Millisecond)
-			canExit, err := IsUpdating()
+			canExit, err := m.IsUpdating()
 			if !canExit || err != nil {
 				ch <- true
 			}
 		}
 	}(ch)
-	canExit, err := IsUpdating()
+	canExit, err := m.IsUpdating()
 	if canExit && nil == err {
 		ticker := time.NewTicker(3 * time.Minute)
 		for {
@@ -43,14 +62,14 @@ func Join() error {
 	return nil
 }
 
-func SetTimeout(timeout uint32) error {
+func (m *GrubManager) SetTimeout(timeout uint32) error {
 	sysBus, err := dbus.SystemBus()
 	if err != nil {
 		return err
 	}
-	grubServiceObj := sysBus.Object(dbusDest,
-		dbusPath)
-	metho := dbusDest + ".SetTimeout"
+	grubServiceObj := sysBus.Object(m.dbusDest,
+		m.dbusPath)
+	metho := m.dbusDest + ".SetTimeout"
 
 	err = grubServiceObj.Call(metho, 0, timeout).Store()
 	if err != nil {
@@ -59,28 +78,28 @@ func SetTimeout(timeout uint32) error {
 	return nil
 }
 
-func CancelRollback() error {
+func (m *GrubManager) CancelRollback() error {
 	sysBus, err := dbus.SystemBus()
 	if err != nil {
 		return err
 	}
-	grubServiceObj := sysBus.Object(dbusDest,
-		dbusPath)
-	metho := dbusDest + ".CancelRollback"
+	grubServiceObj := sysBus.Object(m.dbusDest,
+		m.dbusPath)
+	metho := m.dbusDest + ".CancelRollback"
 
 	return grubServiceObj.Call(metho, 0).Store()
 }
 
-func TimeOut() (uint32, error) {
+func (m *GrubManager) TimeOut() (uint32, error) {
 	sysBus, err := dbus.SystemBus()
 	if err != nil {
 		return 0, err
 	}
-	grubServiceObj := sysBus.Object(dbusDest,
-		dbusPath)
+	grubServiceObj := sysBus.Object(m.dbusDest,
+		m.dbusPath)
 
 	var ret dbus.Variant
-	err = grubServiceObj.Call("org.freedesktop.DBus.Properties.Get", 0, dbusInterface, "Timeout").Store(&ret)
+	err = grubServiceObj.Call("org.freedesktop.DBus.Properties.Get", 0, m.dbusInterface, "Timeout").Store(&ret)
 	if err != nil {
 		return 0, err
 	}
@@ -89,16 +108,16 @@ func TimeOut() (uint32, error) {
 	return v, nil
 }
 
-func IsUpdating() (bool, error) {
+func (m *GrubManager) IsUpdating() (bool, error) {
 	sysBus, err := dbus.SystemBus()
 	if err != nil {
 		return false, err
 	}
-	grubServiceObj := sysBus.Object(dbusDest,
-		dbusPath)
+	grubServiceObj := sysBus.Object(m.dbusDest,
+		m.dbusPath)
 
 	var ret dbus.Variant
-	err = grubServiceObj.Call("org.freedesktop.DBus.Properties.Get", 0, dbusInterface, "Updating").Store(&ret)
+	err = grubServiceObj.Call("org.freedesktop.DBus.Properties.Get", 0, m.dbusInterface, "Updating").Store(&ret)
 	if err != nil {
 		return false, err
 	}
@@ -106,18 +125,18 @@ func IsUpdating() (bool, error) {
 	return v, nil
 }
 
-func GetEnabledUsers() ([]string, error) {
+func (m *GrubManager) GetEnabledUsers() ([]string, error) {
 	var userList []string
 	sysBus, err := dbus.SystemBus()
 	if err != nil {
 		return userList, err
 	}
 
-	grubServiceObj := sysBus.Object(dbusDest,
-		editAuthDBusPath)
+	grubServiceObj := sysBus.Object(m.dbusDest,
+		m.editAuthDBusPath)
 
 	var ret dbus.Variant
-	err = grubServiceObj.Call("org.freedesktop.DBus.Properties.Get", 0, editAuthDBusInterface, "EnabledUsers").Store(&ret)
+	err = grubServiceObj.Call("org.freedesktop.DBus.Properties.Get", 0, m.editAuthDBusInterface, "EnabledUsers").Store(&ret)
 	if err != nil {
 		return userList, err
 	}
