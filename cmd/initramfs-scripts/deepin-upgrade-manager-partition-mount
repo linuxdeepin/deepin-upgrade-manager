@@ -23,26 +23,10 @@ lvchange_activate() {
 	lvm vgchange -ay
 }
 
-
-for x in $(cat /proc/cmdline); do
-	case $x in
-	# The following lines blocked for security reason
-	back_version=*)
-		back_version=${x#back_version=}
-		;;
-	root=/dev/*)
-		root_dev=${x#root=}
-		;;
-	esac
-done
-
 atomic_upgrade_records=${rootmnt}/etc/deepin-upgrade-manager/state.records
 
-
 if [[ "x${back_version}" != "x" ]] || test -e ${atomic_upgrade_records};then
-	if [[ "x${root_dev}" != "x" ]]; then
 		lvchange_activate
-	fi
 fi
 
 
