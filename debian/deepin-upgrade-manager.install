@@ -7,6 +7,6 @@
 /usr/share/initramfs-tools/scripts/local-bottom/deepin-upgrade-manager-partition-mount
 /var/lib/deepin-upgrade-manager/scripts/deepin-upgrade-manager
 /var/lib/deepin-boot-kit/config/atomic.json
-/etc/xdg/autostart/deepin-upgrade-manager-tool.desktop
+/usr/share/deepin-upgrade-manager/deepin-upgrade-manager-tool.desktop
 /usr/bin/deepin-upgrade-manager-tool
 /usr/share/locale/*/LC_MESSAGES/deepin-upgrade-manager.mo

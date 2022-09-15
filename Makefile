@@ -87,8 +87,8 @@ install-upgrader-tool:
 	@mkdir -p ${DESTDIR}${PREFIX}/bin
 	@cp -f ${PWD}/${PROG_UPGRADER_TOOL} ${DESTDIR}${PREFIX}/bin
 
-	@mkdir -p ${DESTDIR}/etc/xdg/autostart/
-	@cp -f ${PWD}/configs/upgrader/deepin-upgrade-manager-tool.desktop ${DESTDIR}/etc/xdg/autostart/deepin-upgrade-manager-tool.desktop
+	@mkdir -p ${DESTDIR}${PREFIX}/share/${PROG_UPGRADER}
+	@cp -f ${PWD}/configs/upgrader/deepin-upgrade-manager-tool.desktop ${DESTDIR}${PREFIX}/share/${PROG_UPGRADER}/deepin-upgrade-manager-tool.desktop
 
 install-bootkit:
 	install -d ${DESTDIR}${PREFIX}/share/locale
@@ -149,7 +149,7 @@ uninstall-upgrader:
 
 uninstall-upgrader-tool:
 	@rm -f ${DESTDIR}${PREFIX}/bin/${PROG_UPGRADER_TOOL}
-	@rm -f ${DESTDIR}/etc/xdg/autostart/deepin-upgrade-manager-tool.desktop
+	@rm -f ${DESTDIR}${PREFIX}/share/${PROG_UPGRADER}/deepin-upgrade-manager-tool.desktop
 
 uninstall-bootkit:
 	@rm -f ${DESTDIR}${PREFIX}/sbin/${PROG_BOOTKIT}

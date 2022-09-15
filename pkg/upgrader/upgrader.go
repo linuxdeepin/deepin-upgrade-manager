@@ -37,8 +37,10 @@ type (
 )
 
 const (
-	SelfMountPath       = "/proc/self/mounts"
-	SelfRecordStatePath = "/etc/deepin-upgrade-manager/state.records"
+	SelfMountPath          = "/proc/self/mounts"
+	SelfRecordStatePath    = "/etc/deepin-upgrade-manager/state.records"
+	LocalNotifyDesktopPath = "/usr/share/deepin-upgrade-manager/deepin-upgrade-manager-tool.desktop"
+	AutoStartDesktopPath   = "/etc/xdg/autostart/deepin-upgrade-manager-tool.desktop"
 
 	LessKeepSize = 5 * 1024 * 1024 * 1024
 )
@@ -516,8 +518,14 @@ func (c *Upgrader) Rollback(version string,
 				goto failure
 			}
 		}
-		c.SaveActiveVersion(backVersion)
+		// rollback ending and need notify
+		err := util.CopyFile(filepath.Join(c.rootMP, LocalNotifyDesktopPath), filepath.Join(c.rootMP, AutoStartDesktopPath), false)
+		if err != nil {
+			logger.Warning(err)
+		}
 		// restore mount points under initramfs and save action version
+		c.SaveActiveVersion(backVersion)
+
 		if len(c.rootMP) != 1 {
 			var needUmountList []string
 			for _, v := range mountedPointList {
@@ -1096,6 +1104,11 @@ func (c *Upgrader) ResetGrub(envVars []string) {
 	}
 	c.recordsInfo.ResetState(envVars)
 	c.recordsInfo.Remove()
+
+	// need remove auto start desktop
+	if util.IsExists(AutoStartDesktopPath) {
+		os.RemoveAll(AutoStartDesktopPath)
+	}
 }
 
 func (c *Upgrader) SendingSignal(evHandler func(op, state int32, target, desc string),
