@@ -35,8 +35,7 @@ func SetNotifyText(text string) error {
 	arg7 = 10000
 	// using deepin clone icon
 	if util.IsExists("/usr/share/deepin-clone") {
-		arg0 = "deepin-clone"
-		arg2 = ""
+		arg2 = "deepin-clone"
 	}
 	return grubServiceObj.Call(metho, 0, arg0, arg1, arg2, arg3, arg4, arg5, map_variable, arg7).Store()
 }
