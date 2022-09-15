@@ -1,8 +1,6 @@
 package grub
 
 import (
-	"deepin-upgrade-manager/pkg/logger"
-	"deepin-upgrade-manager/pkg/module/util"
 	"time"
 
 	"github.com/godbus/dbus"
@@ -18,7 +16,7 @@ type GrubManager struct {
 
 func Init() *GrubManager {
 	var m GrubManager
-	osVersion, err := util.GetOSInfo("MajorVersion")
+	/*osVersion, err := util.GetOSInfo("MajorVersion")
 	if nil != err {
 		logger.Warning("failed get new version, err:", err)
 	}
@@ -31,7 +29,11 @@ func Init() *GrubManager {
 		m.dbusDest = "com.deepin.daemon.Grub2"
 		m.dbusPath = "/com/deepin/daemon/Grub2"
 		m.dbusInterface = m.dbusDest
-	}
+	}*/
+	m.dbusDest = "com.deepin.daemon.Grub2"
+	m.dbusPath = "/com/deepin/daemon/Grub2"
+	m.dbusInterface = m.dbusDest
+
 	m.editAuthDBusPath = m.dbusPath + "/EditAuthentication"
 	m.editAuthDBusInterface = m.dbusInterface + ".EditAuthentication"
 	return &m
