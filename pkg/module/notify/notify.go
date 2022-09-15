@@ -1,6 +1,8 @@
 package notify
 
 import (
+	"deepin-upgrade-manager/pkg/module/util"
+
 	"github.com/godbus/dbus"
 )
 
@@ -31,5 +33,10 @@ func SetNotifyText(text string) error {
 	arg2 = "preferences-system"
 	arg3 = text
 	arg7 = 10000
+	// using deepin clone icon
+	if util.IsExists("/usr/share/deepin-clone") {
+		arg0 = "deepin-clone"
+		arg2 = ""
+	}
 	return grubServiceObj.Call(metho, 0, arg0, arg1, arg2, arg3, arg4, arg5, map_variable, arg7).Store()
 }
