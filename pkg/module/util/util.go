@@ -85,6 +85,20 @@ func MakeRandomString(num int) string {
 	if num < MinRandomLen {
 		num = MinRandomLen
 	}
+	str := "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	bytes := []byte(str)
+	result := []byte{}
+	mrand.Seed(time.Now().UnixNano() + int64(mrand.Intn(100)))
+	for i := 0; i < num; i++ {
+		result = append(result, bytes[mrand.Intn(len(bytes))])
+	}
+	return string(result)
+}
+
+func MakeCryptoRandomString(num int) string {
+	if num < MinRandomLen {
+		num = MinRandomLen
+	}
 	data := make([]byte, num/2)
 	_, err := rand.Read(data)
 	if err == nil {
