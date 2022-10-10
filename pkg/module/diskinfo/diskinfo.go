@@ -1,7 +1,6 @@
 package diskinfo
 
 import (
-	"deepin-upgrade-manager/pkg/logger"
 	"io/ioutil"
 	"path/filepath"
 )
@@ -116,17 +115,8 @@ func Load(filename string) (DiskIDList, error) {
 			UUID:      fi.Name(),
 		})
 	}
-	err = infos.handleLoad(filename, _DISK_PARTLABEL)
-	if err != nil {
-		logger.Warningf("failed to read %s, err: %v", _DISK_PARTLABEL, err)
-	}
-	err = infos.handleLoad(filename, _DISK_LABEL)
-	if err != nil {
-		logger.Warningf("failed to read %s, err: %v", _DISK_LABEL, err)
-	}
-	err = infos.handleLoad(filename, _DISK_PARTUUID)
-	if err != nil {
-		logger.Warningf("failed to read %s, err: %v", _DISK_PARTUUID, err)
-	}
+	infos.handleLoad(filename, _DISK_PARTLABEL)
+	infos.handleLoad(filename, _DISK_LABEL)
+	infos.handleLoad(filename, _DISK_PARTUUID)
 	return infos, nil
 }

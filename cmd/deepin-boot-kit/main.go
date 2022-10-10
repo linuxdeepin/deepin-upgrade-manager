@@ -2,7 +2,7 @@ package main
 
 import (
 	"deepin-upgrade-manager/pkg/bootkit"
-	"deepin-upgrade-manager/pkg/config"
+	config "deepin-upgrade-manager/pkg/config/bootkit"
 	"deepin-upgrade-manager/pkg/logger"
 	"deepin-upgrade-manager/pkg/module/util"
 	"flag"

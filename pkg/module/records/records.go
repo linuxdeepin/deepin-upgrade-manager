@@ -31,6 +31,7 @@ const (
 type RecordsInfo struct {
 	CurrentState    RecoredState `json:"CurrentState"`
 	RollbackVersion string       `json:"RollbackVersion"`
+	RepoMount       string       `json:"Repo_Mount_Point"`
 	TimeOut         uint32       `json:"GrubTimeout"`
 
 	filename    string
@@ -65,14 +66,14 @@ func readFile(recordsfile string, info interface{}) error {
 	return json.Unmarshal(content, info)
 }
 
-func LoadRecords(rootfs, recordsfile string) *RecordsInfo {
+func LoadRecords(rootfs, recordsfile, repoMount string) *RecordsInfo {
 	var info RecordsInfo
 	path := filepath.Join(rootfs, recordsfile)
 	info.filename = path
 	info.CurrentState = _UNKNOW_STATE
 	info.TimeOut = 2
 	info.RollbackVersion = ""
-
+	info.RepoMount = repoMount
 	defer info.save()
 	if util.IsExists(path) {
 		err := readFile(path, &info)

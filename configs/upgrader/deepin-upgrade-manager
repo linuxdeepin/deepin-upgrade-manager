@@ -12,9 +12,16 @@ case "${1}" in
         ;;
 esac
 
+# for the user in the grub began to roll back
+
 . /scripts/functions
 . /scripts/local
 . /scripts/nfs
+
+repo_mount=n
+
+atomic_upgrade_records=${rootmnt}/etc/deepin-upgrade-manager/state.records
+fstable_path=${rootmnt}/etc/fstab
 
 
 for x in $(cat /proc/cmdline); do
@@ -23,25 +30,49 @@ for x in $(cat /proc/cmdline); do
 	back_version=*)
 		back_version=${x#back_version=}
 		;;
+	backup_uuid=*)
+		backup_uuid=${x#backup_uuid=}
+		;;
 	esac
 done
 
-if [[ "x${back_version}" = "x" ]];then
+if [[ "x${back_version}" = "x" ] ||  [ "x${backup_uuid}" != "x" ]];then
 	exit 0
 fi
 
-
-atomic_upgrade_config=${rootmnt}/etc/deepin-upgrade-manager/config.json
-
-repo_mount=n
-
-repo_records_point_key=repo_mount_point
 repo_mount_point=
-if test -e ${atomic_upgrade_config}; then
-	repo_mount_point=$(echo "$(cat ${atomic_upgrade_config})" | awk -F "[{,:}]" '{for(i=1;i<=NF;i++){if($i~"'${repo_records_point_key}'"){print $(i+1)}}}' | sed 's/\"//g')
-fi
+mount_backup()
+{
+    repo_uuid=$1
+    repo_dev=$(blkid --uuid $repo_uuid)
+    echo $repo_dev
+    while read fstabline; do
+        # eg: UUID=bfc917ad-6f18-462b-af29-9bc823fd726d       /    ext4    rw,relatime    0 1
+       for x in "$fstabline"; do
+		case $x in
+		UUID=*)
+			UUID=${x#UUID=}
+			#echo $repo_uuid
+			if [ "$(echo "$UUID" | awk '{print $1}')" = "$repo_uuid" ]; then
+				repo_mount_point=$(echo "$UUID" | awk '{print $2}')
+				return
+			fi
+			;;
+		"$repo_dev"*)
+			repo_mount_point=$(echo "$fstabline" | awk '{print $2}')
+			return
+		esac
+	done
+    done < "$fstable_path"
+}
 
-if [[ -n ${repo_mount_point} ]];then
+mount_backup "${backup_uuid}"
+
+if test -n ${repo_mount_point};then
+
+	# /persistent/osroot/config/config.json
+	atomic_upgrade_config=${rootmnt}${repo_mount_point}/osroot/config/config.json
+
 	if [ "${readonly}" = "y" ]; then
 		mount -o rw,remount ${rootmnt}
 		readonly=n
@@ -54,7 +85,7 @@ if [[ -n ${repo_mount_point} ]];then
 			log_begin_msg "Mounting ${repo_mount_point} file system"
 		fi
 	fi
-	echo "will rollback to ${rootmnt}${repo_mount_point}/osroot/snapshot/${back_version}"
+	echo "will rollback to ${rootmnt}${repo_mount_point}/osroot/${back_version}"
 	deepin-upgrade-manager --config="${atomic_upgrade_config}" --action=rollback --version="${back_version}" --root="${rootmnt}"
 	if [ "${readonly}" = "n" ]; then
 		mount -o ro,remount ${rootmnt}

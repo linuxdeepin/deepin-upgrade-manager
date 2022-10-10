@@ -104,7 +104,7 @@ func (infolist *BootInfoList) InitrdName(initrdPaths []string, vmlinux string) s
 	return initrdPaths[0]
 }
 
-func Load(versionList []string) BootInfoList {
+func Load(versionList []string, RepoUUID string) BootInfoList {
 	var infolist BootInfoList
 	var isAcrossPart bool
 
@@ -150,6 +150,7 @@ func Load(versionList []string) BootInfoList {
 			}
 			info.Version = v
 			info.Scheme = SCHEME
+			info.UUID = RepoUUID
 		} else {
 			continue
 		}

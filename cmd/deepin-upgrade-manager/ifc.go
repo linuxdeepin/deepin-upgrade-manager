@@ -1,7 +1,7 @@
 package main
 
 import (
-	"deepin-upgrade-manager/pkg/config"
+	config "deepin-upgrade-manager/pkg/config/upgrader"
 	"deepin-upgrade-manager/pkg/logger"
 	"deepin-upgrade-manager/pkg/module/bootkitinfo"
 	"deepin-upgrade-manager/pkg/module/repo/branch"
@@ -25,6 +25,7 @@ type Manager struct {
 	running       bool
 	hasCall       bool
 	ActiveVersion string
+	repoUUID      string
 }
 
 func NewManager(config *config.Config, daemon bool) (*Manager, error) {
@@ -34,10 +35,16 @@ func NewManager(config *config.Config, daemon bool) (*Manager, error) {
 		logger.Fatal("Failed to new upgrade:", err)
 		return nil, err
 	}
+
+	_, uuid, err := upgrade.RepoMountpointAndUUID()
+	if err != nil {
+		uuid = ""
+	}
 	var m = &Manager{
 		upgrade:       upgrade,
 		ActiveVersion: config.ActiveVersion,
 		running:       false,
+		repoUUID:      uuid,
 	}
 
 	if daemon {

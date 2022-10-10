@@ -13,6 +13,7 @@ import (
 
 type FsInfo struct {
 	SrcPoint  string
+	DiskUUID  string
 	DestPoint string
 	FSType    string
 	Options   string
@@ -21,9 +22,9 @@ type FsInfo struct {
 
 type FsInfoList []*FsInfo
 
-func (fs FsInfoList) MaxFreePartitionPoint() string {
+func (fs FsInfoList) MaxFreePartitionPoint() (string, string) {
 	var maxFree uint64
-	var point string
+	var point, uuid string
 	for _, v := range fs {
 		free, err := dirinfo.GetPartitionFreeSize(v.DestPoint)
 		if err != nil {
@@ -33,12 +34,23 @@ func (fs FsInfoList) MaxFreePartitionPoint() string {
 		if maxFree < free {
 			maxFree = free
 			point = v.DestPoint
+			uuid = v.DiskUUID
 		}
 	}
-	return point
+	return point, uuid
 }
 
-func getPartiton(spec string, dsInfos diskinfo.DiskIDList) (string, error) {
+func (fs FsInfoList) MatchDestPoint(point string) FsInfo {
+	var info FsInfo
+	for _, v := range fs {
+		if v.DestPoint == point {
+			info = *v
+		}
+	}
+	return info
+}
+
+func getPartiton(spec string, dsInfos diskinfo.DiskIDList) (string, string, error) {
 	bits := strings.Split(spec, "=")
 	var specvalue string
 	var dsInfo *diskinfo.DiskID
@@ -61,9 +73,9 @@ func getPartiton(spec string, dsInfos diskinfo.DiskIDList) (string, error) {
 		dsInfo = dsInfos.MatchPartition(specvalue)
 	}
 	if nil == dsInfo {
-		return "", fmt.Errorf("cannot match the corresponding partition of the disk,specvalue:%s", specvalue)
+		return "", "", fmt.Errorf("cannot match the corresponding partition of the disk,specvalue:%s", specvalue)
 	}
-	return dsInfo.Partition, nil
+	return dsInfo.Partition, dsInfo.UUID, nil
 }
 
 func parseOptions(optionsString string) (options map[string]string) {
@@ -82,7 +94,6 @@ func parseOptions(optionsString string) (options map[string]string) {
 
 // /etc/fstab
 func Load(filename, rootDir string) (FsInfoList, error) {
-	logger.Debugf("load file %s to get mount information", filename)
 	fr, err := os.Open(filepath.Clean(filename))
 	if err != nil {
 		return nil, err
@@ -109,7 +120,7 @@ func Load(filename, rootDir string) (FsInfoList, error) {
 			logger.Warningf("too few fields (%d), at least 4 are expected", len(items))
 			continue
 		} else {
-			var srcMountPoint string
+			var srcMountPoint, uuid string
 			var isBind bool
 			if items[1] == "none" {
 				continue
@@ -119,7 +130,7 @@ func Load(filename, rootDir string) (FsInfoList, error) {
 				srcMountPoint = filepath.Join(rootDir, items[0])
 				isBind = true
 			} else {
-				srcMountPoint, err = getPartiton(items[0], dsInfos)
+				srcMountPoint, uuid, err = getPartiton(items[0], dsInfos)
 				if err != nil {
 					logger.Warning("failed get mount point, err:", err)
 					return infos, err
@@ -129,6 +140,7 @@ func Load(filename, rootDir string) (FsInfoList, error) {
 
 			infos = append(infos, &FsInfo{
 				SrcPoint:  srcMountPoint,
+				DiskUUID:  uuid,
 				DestPoint: items[1],
 				FSType:    items[2],
 				Options:   items[3],

@@ -59,14 +59,10 @@ func loadVersionConfig(cmd string) (*VersionListConfig, error) {
 	if len(context) > 1 {
 		arg = context[1:]
 	}
-	content, err := util.ExecCommandWithOut(action, arg)
+	content, _ := util.ExecCommandWithOut(action, arg)
+	err := json.Unmarshal([]byte(content), &versionConfig)
 	if err != nil {
 		return &versionConfig, err
-	}
-
-	err = json.Unmarshal([]byte(content), &versionConfig)
-	if err != nil {
-		return &versionConfig, nil
 	}
 	err = versionConfig.checkConfig()
 	if err != nil {

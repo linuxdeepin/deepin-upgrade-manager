@@ -10,6 +10,7 @@
     {
       "repo_mount_point":"/persistent",
       "repo": "/persistent/osroot/repo",
+      "config_dir": "/persistent/osroot/config",
       "stage_dir": "/persistent/osroot/cache",
       "snapshot_dir": "/persistent/osroot/snapshot",
       "subscribe_list": [

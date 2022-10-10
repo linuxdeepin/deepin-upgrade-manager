@@ -16,6 +16,7 @@ type RepoConfig struct {
 	RepoMountPoint string `json:"repo_mount_point"`
 	Repo           string `json:"repo"`
 	SnapshotDir    string `json:"snapshot_dir"`
+	ConfigDir      string `json:"config_dir"`
 	StageDir       string `json:"stage_dir"`
 
 	SubscribeList []string `json:"subscribe_list"`
@@ -49,6 +50,16 @@ func (c *Config) Prepare() error {
 		if err != nil {
 			return err
 		}
+		err = os.MkdirAll(repo.ConfigDir, 0750)
+		if err != nil {
+			return err
+		}
+	}
+	repoConfig := filepath.Join(c.RepoList[0].ConfigDir, "config.json")
+	if !util.IsExists(repoConfig) {
+		util.CopyFile(c.filename, repoConfig, false)
+		c.Save()
+		c.filename = repoConfig
 	}
 	return nil
 }
@@ -116,10 +127,12 @@ func (c *Config) ChangeRepoMountPoint(mountpoint string) {
 			v.Repo = strings.Replace(v.Repo, v.RepoMountPoint, "", 1)
 			v.SnapshotDir = strings.Replace(v.SnapshotDir, v.RepoMountPoint, "", 1)
 			v.StageDir = strings.Replace(v.StageDir, v.RepoMountPoint, "", 1)
+			v.ConfigDir = strings.Replace(v.ConfigDir, v.RepoMountPoint, "", 1)
 		} else {
 			v.Repo = strings.Replace(v.Repo, v.RepoMountPoint, mountpoint, 1)
 			v.SnapshotDir = strings.Replace(v.SnapshotDir, v.RepoMountPoint, mountpoint, 1)
 			v.StageDir = strings.Replace(v.StageDir, v.RepoMountPoint, mountpoint, 1)
+			v.ConfigDir = strings.Replace(v.ConfigDir, v.RepoMountPoint, mountpoint, 1)
 		}
 		if isExist {
 			v.FilterList = append(v.FilterList, filepath.Dir(v.Repo))
@@ -139,6 +152,14 @@ func LoadConfig(filename string) (*Config, error) {
 	err := loadFile(&info, filename)
 	if err != nil {
 		return nil, err
+	}
+	repoConfig := filepath.Join(info.RepoList[0].ConfigDir, "config.json")
+	if util.IsExists(repoConfig) {
+		filename = repoConfig
+		err := loadFile(&info, filename)
+		if err != nil {
+			return nil, err
+		}
 	}
 	info.filename = filename
 	return &info, nil

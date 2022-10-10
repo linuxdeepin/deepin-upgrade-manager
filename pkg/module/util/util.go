@@ -187,7 +187,7 @@ func ExecCommandWithOut(action string, args []string) ([]byte, error) {
 	cmd.Wait()
 	errout = ClearByteZero(errout)
 	if len(errout) != 0 {
-		return out, errors.New(string(errout))
+		return ClearByteZero(out), errors.New(string(errout))
 	}
 	return ClearByteZero(out), nil
 }

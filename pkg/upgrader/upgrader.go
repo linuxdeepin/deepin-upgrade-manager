@@ -1,7 +1,7 @@
 package upgrader
 
 import (
-	"deepin-upgrade-manager/pkg/config"
+	config "deepin-upgrade-manager/pkg/config/upgrader"
 	"deepin-upgrade-manager/pkg/logger"
 	"deepin-upgrade-manager/pkg/module/bootkitinfo"
 	"deepin-upgrade-manager/pkg/module/dirinfo"
@@ -150,6 +150,8 @@ type Upgrader struct {
 
 	recordsInfo *records.RecordsInfo
 
+	fsInfo fstabinfo.FsInfoList
+
 	repoSet map[string]repo.Repository
 
 	rootMP string
@@ -166,11 +168,17 @@ func NewUpgrader(conf *config.Config,
 	if err != nil {
 		return nil, err
 	}
+	fstabDir := filepath.Clean(filepath.Join(rootMP, "/etc/fstab"))
+	fsInfo, err := fstabinfo.Load(fstabDir, rootMP)
+	if err != nil {
+		return nil, err
+	}
 	info := Upgrader{
 		conf:       conf,
 		mountInfos: mountInfos,
 		repoSet:    make(map[string]repo.Repository),
 		rootMP:     rootMP,
+		fsInfo:     fsInfo,
 	}
 	for _, v := range conf.RepoList {
 		handler, err := repo.NewRepo(repo.REPO_TY_OSTREE, filepath.Join(rootMP, v.Repo))
@@ -198,22 +206,12 @@ func (c *Upgrader) ResetRepo() {
 func (c *Upgrader) Init() (int, error) {
 	exitCode := _STATE_TY_SUCCESS
 	var repoMountPoint string
-	fsInfo, err := fstabinfo.Load("/etc/fstab", c.rootMP)
-	if err != nil {
-		repoMountPoint = c.mountInfos.MaxPartition([]string{"/data", "/persistent"})
-		logger.Warning("failed load /etc/fstab infos")
-	} else {
-		repoMountPoint = fsInfo.MaxFreePartitionPoint()
-	}
-	for _, v := range c.conf.RepoList {
-		// need keep 5GB free space
-		isEnough, err := c.isDirSpaceEnough(repoMountPoint, c.rootMP, v.SubscribeList, LessKeepSize, false)
-		exitCode = _STATE_TY_FAILED_OSTREE_INIT
-		if !isEnough {
-			return int(exitCode), err
-		}
-	}
 
+	repoMountPoint, _, err := c.RepoMountpointAndUUID()
+	if err != nil {
+		exitCode = _STATE_TY_FAILED_OSTREE_INIT
+		return int(exitCode), err
+	}
 	if len(repoMountPoint) != 0 {
 		point := strings.TrimSpace(repoMountPoint)
 		c.conf.ChangeRepoMountPoint(point)
@@ -405,8 +403,8 @@ func (c *Upgrader) EnableBootList() (string, int, error) {
 		c.EnableBoot(v)
 		showList = append(showList, v)
 	}
-
-	listInfo := bootkitinfo.Load(showList)
+	diskInfo := c.fsInfo.MatchDestPoint(c.conf.RepoList[0].RepoMountPoint)
+	listInfo := bootkitinfo.Load(showList, diskInfo.DiskUUID)
 	for _, v := range showList {
 		commitName := c.GrubTitle(v)
 		listInfo.SetVersionName(v, commitName)
@@ -888,7 +886,7 @@ func (c *Upgrader) updataLoaclMount(snapDir string) (mountpoint.MountPointList, 
 	if err != nil {
 		return mountedPointList, err
 	}
-	fsInfo, err := fstabinfo.Load(fstabDir, c.rootMP)
+	c.fsInfo, err = fstabinfo.Load(fstabDir, c.rootMP)
 	if err != nil {
 		logger.Debugf("the %s file does not exist in the snapshot, read the local fstabl", fstabDir)
 		return mountedPointList, err
@@ -897,7 +895,7 @@ func (c *Upgrader) updataLoaclMount(snapDir string) (mountpoint.MountPointList, 
 	if err != nil {
 		return mountedPointList, err
 	}
-	for _, info := range fsInfo {
+	for _, info := range c.fsInfo {
 		if info.SrcPoint == rootPartition || info.DestPoint == "/" {
 			logger.Debugf("ignore mount point %s", info.DestPoint)
 			continue
@@ -1096,6 +1094,27 @@ func (c *Upgrader) Subject(version string) (string, error) {
 	return handler.Subject(version)
 }
 
+func (c *Upgrader) RepoMountpointAndUUID() (string, string, error) {
+	list, _, _ := c.ListVersion()
+	if len(list) != 0 {
+		diskInfo := c.fsInfo.MatchDestPoint(c.conf.RepoList[0].RepoMountPoint)
+		return diskInfo.SrcPoint, diskInfo.DiskUUID, nil
+	}
+	repoMountPoint, uuid := c.fsInfo.MaxFreePartitionPoint()
+	for _, v := range c.conf.RepoList {
+		// need keep 5GB free space
+		isEnough, err := c.isDirSpaceEnough(repoMountPoint, c.rootMP, v.SubscribeList, LessKeepSize, false)
+		if err != nil {
+			logger.Warning(err)
+			continue
+		}
+		if !isEnough {
+			return "", "", err
+		}
+	}
+	return repoMountPoint, uuid, nil
+}
+
 func (c *Upgrader) ResetGrub(envVars []string) {
 	err := c.LoadRollbackRecords(false)
 	if err != nil {
@@ -1180,7 +1199,12 @@ func (c *Upgrader) LoadRollbackRecords(needcreated bool) error {
 
 	// save rollback records state
 	if needcreated || util.IsExists(filepath.Join(c.rootMP, SelfRecordStatePath)) {
-		recordsInfo = records.LoadRecords(c.rootMP, SelfRecordStatePath)
+		var repoPart string
+		//prevent user power can't read config
+		if c.conf != nil {
+			repoPart = c.conf.RepoList[0].RepoMountPoint
+		}
+		recordsInfo = records.LoadRecords(c.rootMP, SelfRecordStatePath, repoPart)
 	} else {
 		return errors.New("failed load rollback records, the file does not exist")
 	}
