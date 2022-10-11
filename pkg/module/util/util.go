@@ -273,9 +273,19 @@ func IsRootSame(list []string, str string) bool {
 	return false
 }
 
-func GetRealDirList(list []string, rootDir, snapDir string) []string {
-	var newList []string
-	var rootList []string
+func IsDir(path string) bool {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	if !fi.IsDir() {
+		return false
+	}
+	return true
+}
+
+func GetRealDirList(list []string, rootDir, snapDir string) ([]string, []string) {
+	var newDirList, newFileList, rootList []string
 	for _, v := range list {
 		dir := filepath.Join(rootDir, v)
 		rootList = append(rootList, dir)
@@ -307,9 +317,14 @@ func GetRealDirList(list []string, rootDir, snapDir string) []string {
 					real)
 			}
 		}
-		newList = append(newList, v)
+		if IsDir(v) {
+			newDirList = append(newDirList, v)
+		} else {
+			newFileList = append(newFileList, v)
+		}
+
 	}
-	return newList
+	return newDirList, newFileList
 }
 
 // @title    MoveDirSubFile

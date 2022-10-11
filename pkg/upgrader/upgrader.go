@@ -505,6 +505,11 @@ func (c *Upgrader) Rollback(version string,
 		mountedPointList, err = c.UpdataMount(c.conf.RepoList[0], backVersion)
 		if err != nil {
 			exitCode = _STATE_TY_FAILED_HANDLING_MOUNTS
+			c.recordsInfo.SetFailed(c.conf.ActiveVersion)
+			err := util.CopyFile(filepath.Join(c.rootMP, LocalNotifyDesktopPath), filepath.Join(c.rootMP, AutoStartDesktopPath), false)
+			if err != nil {
+				logger.Warning(err)
+			}
 			goto failure
 		}
 
@@ -711,15 +716,14 @@ func (c *Upgrader) handleRepoRollbak(realDir, snapDir, version string,
 func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) error {
 	var rollbackDirList []string
 	snapDir := filepath.Join(repoConf.SnapshotDir, version)
-	realSubscribeList := util.GetRealDirList(repoConf.SubscribeList, c.rootMP, snapDir)
+	realDirSubscribeList, realFileSubcribeList := util.GetRealDirList(repoConf.SubscribeList, c.rootMP, snapDir)
 	var err error
-
 	defer func() {
 		// if failed update, restoring the system
 		if err != nil || c.recordsInfo.IsRestore() {
 			c.recordsInfo.SetRestore()
 			logger.Warning("failed rollback, recover rollback action")
-			for _, dir := range realSubscribeList {
+			for _, dir := range realDirSubscribeList {
 				err := c.handleRepoRollbak(dir, snapDir, version, &rollbackDirList, util.HandlerDirRecover)
 				if err != nil {
 					logger.Error("failed recover rollback, err:", err)
@@ -750,7 +754,7 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 	}()
 	// prepare the repo file under the system path
 	if c.recordsInfo.IsNeedPrepareRepoFile() {
-		for _, dir := range realSubscribeList {
+		for _, dir := range realDirSubscribeList {
 			err = c.handleRepoRollbak(dir, snapDir, version, &rollbackDirList, util.HandlerDirPrepare)
 			if err != nil {
 				return err
@@ -796,7 +800,7 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 	var bootDir string
 	// repo files replace system files
 
-	for _, dir := range realSubscribeList {
+	for _, dir := range realDirSubscribeList {
 		logger.Debug("start replacing the dir:", dir)
 		if strings.HasSuffix(filepath.Join(c.rootMP, "/boot"), dir) {
 			logger.Debugf("the %s needs to be replaced last", dir)
@@ -808,11 +812,25 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 			return err
 		}
 	}
-	// last replace /boot, protect system boot
+	// last replace /boot dir, protect system boot
 	if len(bootDir) != 0 {
 		err = c.handleRepoRollbak(bootDir, snapDir, version, &rollbackDirList, util.HandlerDirRollback)
 		if err != nil {
 			return err
+		}
+	}
+
+	// replace file is fast
+	if len(realFileSubcribeList) != 0 {
+		for _, v := range realFileSubcribeList {
+			realFile := util.TrimRootdir(c.rootMP, v)
+			snapFile := filepath.Join(snapDir, realFile)
+			logger.Debugf("start rolling back file, realfile:%s, snapFile:%s",
+				realFile, snapFile)
+			err := util.CopyFile(snapFile, realFile, false)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -833,10 +851,27 @@ func (c *Upgrader) copyRepoData(rootDir, dataDir string,
 			logger.Info("[copyRepoData] src dir empty:", srcDir)
 			continue
 		}
-		err := util.CopyDir(srcDir, filepath.Join(dataDir, dir), filterDirs, filterFiles, true)
+		fi, err := os.Stat(srcDir)
 		if err != nil {
-			return err
+			continue
 		}
+		if fi.IsDir() {
+			logger.Info("[copyRepoData] src dir:", srcDir)
+			err := util.CopyDir(srcDir, filepath.Join(dataDir, dir), filterDirs, filterFiles, true)
+			if err != nil {
+				return err
+			}
+		} else {
+			logger.Info("[copyRepoData] src file:", srcDir)
+			real, err := filepath.EvalSymlinks(srcDir)
+			if err != nil {
+				continue
+			}
+			if !util.IsRootSame(subscribeList, real) || real == srcDir {
+				util.CopyFile2(real, filepath.Join(dataDir, dir), fi, true)
+			}
+		}
+
 	}
 	return nil
 }
@@ -1164,7 +1199,6 @@ func (c *Upgrader) SendSystemNotice() error {
 		grubServiceObj.Call(metho, 0, c.recordsInfo.RollbackVersion).Store(&ret)
 		grubTitle = ret.Value().(string)
 	}
-
 	if c.recordsInfo.IsSucceeded() {
 		text, err := util.GetUpgradeText(msgSuccessRollBack)
 		if err != nil {
