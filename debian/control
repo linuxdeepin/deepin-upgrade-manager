@@ -6,7 +6,8 @@ Build-Depends:
  debhelper-compat (= 12),
  dh-golang,
  golang-any,
- golang-dbus-dev
+ golang-dbus-dev,
+ golang-gopkg-yaml.v2-dev
 Standards-Version: 4.5.1
 Homepage: https://www.deepin.org
 #Vcs-Browser: https://salsa.debian.org/debian/asldfk

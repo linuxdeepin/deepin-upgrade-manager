@@ -4,16 +4,25 @@ import (
 	"deepin-upgrade-manager/pkg/logger"
 	"deepin-upgrade-manager/pkg/module/util"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
 )
 
+const (
+	DATA_YAML_PATH   = "ready/config.yaml"
+	LOCAL_CONFIG_DIR = "/var/lib/deepin-upgrade-manager/config/"
+)
+
 type RepoConfig struct {
 	RepoMountPoint string `json:"repo_mount_point"`
+	DataOrigin     string `json:"data_origin"`
 	Repo           string `json:"repo"`
 	SnapshotDir    string `json:"snapshot_dir"`
 	ConfigDir      string `json:"config_dir"`
@@ -26,6 +35,7 @@ type RepoListConfig []*RepoConfig
 
 type Config struct {
 	filename string
+	dataname string
 	locker   sync.RWMutex
 
 	Version       string `json:"config_version"`
@@ -57,9 +67,16 @@ func (c *Config) Prepare() error {
 	}
 	repoConfig := filepath.Join(c.RepoList[0].ConfigDir, "config.json")
 	if !util.IsExists(repoConfig) {
-		util.CopyFile(c.filename, repoConfig, false)
+		util.CopyDir(path.Dir(c.filename), c.RepoList[0].ConfigDir,
+			[]string{""}, []string{""}, false)
 		c.Save()
+		c.dataname = filepath.Join(c.RepoList[0].ConfigDir, DATA_YAML_PATH)
 		c.filename = repoConfig
+		// local config is max power
+		localConfig := filepath.Join(LOCAL_CONFIG_DIR, DATA_YAML_PATH)
+		if util.IsExists(localConfig) {
+			util.CopyFile(localConfig, c.dataname, false)
+		}
 	}
 	return nil
 }
@@ -116,13 +133,6 @@ func (c *Config) ChangeRepoMountPoint(mountpoint string) {
 		if v.RepoMountPoint == mountpoint {
 			continue
 		}
-		var isExist bool
-		for _, v := range v.SubscribeList {
-			if strings.HasPrefix(mountpoint, v) {
-				isExist = true
-			}
-		}
-
 		if mountpoint == "/" {
 			v.Repo = strings.Replace(v.Repo, v.RepoMountPoint, "", 1)
 			v.SnapshotDir = strings.Replace(v.SnapshotDir, v.RepoMountPoint, "", 1)
@@ -134,9 +144,7 @@ func (c *Config) ChangeRepoMountPoint(mountpoint string) {
 			v.StageDir = strings.Replace(v.StageDir, v.RepoMountPoint, mountpoint, 1)
 			v.ConfigDir = strings.Replace(v.ConfigDir, v.RepoMountPoint, mountpoint, 1)
 		}
-		if isExist {
-			v.FilterList = append(v.FilterList, filepath.Dir(v.Repo))
-		}
+
 		v.RepoMountPoint = mountpoint
 	}
 }
@@ -147,14 +155,119 @@ func (c *Config) SetDistribution(version string) {
 	}
 }
 
-func LoadConfig(filename string) (*Config, error) {
+func (c *Config) AppendCommit(dirs []string, isClear bool) {
+	if isClear {
+		c.RepoList[0].SubscribeList = c.RepoList[0].SubscribeList[:0]
+	}
+	for _, v := range dirs {
+		if util.IsRootSame(c.RepoList[0].SubscribeList, v) {
+			continue
+		} else {
+			c.RepoList[0].SubscribeList = append(c.RepoList[0].SubscribeList, v)
+		}
+	}
+}
+
+func (c *Config) AppendFilter(dirs []string, isClear bool) {
+	if isClear {
+		c.RepoList[0].FilterList = c.RepoList[0].FilterList[:0]
+	}
+	for _, v := range dirs {
+		if util.IsRootSame(c.RepoList[0].FilterList, v) {
+			continue
+		} else {
+			c.RepoList[0].FilterList = append(c.RepoList[0].FilterList, v)
+		}
+	}
+}
+
+func (c *Config) LoadData(path string) {
+	dataCf, err := LoadDataConfig(path)
+	if err != nil {
+		logger.Warning(err)
+	}
+	c.RepoList[0].DataOrigin = path
+
+	c.AppendCommit(dataCf.Target.Replace_dirs, true)
+	c.AppendFilter(dataCf.Target.Migrate_dirs, true)
+
+	for _, v := range c.RepoList[0].SubscribeList {
+		if strings.HasPrefix(c.RepoList[0].RepoMountPoint, v) {
+			c.AppendFilter([]string{filepath.Dir(c.RepoList[0].Repo)}, false)
+		}
+	}
+}
+
+func (c *Config) LoadReadyData() {
+	if !util.IsExists(c.dataname) {
+		return
+	}
+	logger.Debug("load ready config path: ", c.dataname)
+	c.LoadData(c.dataname)
+	c.Save()
+}
+
+func (c *Config) LoadVersionData(version, rootDir string) error {
+	if !util.IsExists(c.dataname) || len(version) == 0 {
+		return fmt.Errorf("failed load version yaml config, path:%s, version:%s", c.dataname, version)
+	}
+	versionConfigPath := filepath.Join(rootDir, c.RepoList[0].ConfigDir, version, "config.yaml")
+	logger.Debug("load version config path: ", versionConfigPath)
+	c.LoadData(versionConfigPath)
+	c.Save()
+	return nil
+}
+
+func (c *Config) SetVersionConfig(version string) {
+	if len(version) == 0 {
+		return
+	}
+	versionConfig := filepath.Join(c.RepoList[0].ConfigDir, version)
+	os.MkdirAll(versionConfig, 0750)
+	util.CopyFile(c.dataname, filepath.Join(versionConfig, "config.yaml"), false)
+}
+
+func (c *Config) ReadyDataPath() string {
+	path := filepath.Join(c.RepoList[0].ConfigDir, DATA_YAML_PATH)
+	if util.IsExists(path) {
+		return path
+	}
+	localConfig := filepath.Join(LOCAL_CONFIG_DIR, DATA_YAML_PATH)
+	if util.IsExists(localConfig) {
+		return localConfig
+	}
+	return c.dataname
+}
+
+func (c *Config) SetReadyData(datapath string) error {
+	if !util.IsExists(datapath) {
+		return errors.New("failed set config, file does not exist")
+	}
+	_, err := LoadDataConfig(datapath)
+	if err != nil {
+		return err
+	}
+	repoPath := filepath.Join(c.RepoList[0].ConfigDir, DATA_YAML_PATH)
+	if util.IsExists(repoPath) {
+		util.CopyFile(datapath, repoPath, false)
+		logger.Debugf("set %s to %s", datapath, repoPath)
+		return nil
+	}
+	localPath := filepath.Join(LOCAL_CONFIG_DIR, DATA_YAML_PATH)
+	os.MkdirAll(path.Dir(localPath), 0750)
+	util.CopyFile(datapath, localPath, false)
+	logger.Debugf("set %s to %s", datapath, localPath)
+	return nil
+}
+
+func LoadConfig(filename, rootDir string) (*Config, error) {
 	var info Config
 	err := loadFile(&info, filename)
 	if err != nil {
 		return nil, err
 	}
-	repoConfig := filepath.Join(info.RepoList[0].ConfigDir, "config.json")
-	if util.IsExists(repoConfig) {
+	repoConfig := filepath.Join(rootDir, info.RepoList[0].ConfigDir, "config.json")
+	if util.IsExists(repoConfig) && repoConfig != filename {
 		filename = repoConfig
 		err := loadFile(&info, filename)
 		if err != nil {
@@ -162,5 +275,7 @@ func LoadConfig(filename string) (*Config, error) {
 		}
 	}
 	info.filename = filename
+	info.dataname = filepath.Join(path.Dir(filename), DATA_YAML_PATH)
+	logger.Debugf("using config file path: %s, using data file path: %s", filename, info.dataname)
 	return &info, nil
 }

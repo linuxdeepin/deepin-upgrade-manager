@@ -28,6 +28,7 @@ const (
 	_ACTION_DELETE   = "delete"
 	_ACTION_SUBJECT  = "subject"
 	_ACTION_CANCEL   = "cancel"
+	_ACTION_SET      = "setdefaultconfig"
 )
 
 const (
@@ -36,8 +37,9 @@ const (
 )
 
 var (
-	_config  = flag.String("config", "/etc/deepin-upgrade-manager/config.json", "the configuration file path")
-	_action  = flag.String("action", "list", "the available actions: init, commit, rollback, list, cancel")
+	_config  = flag.String("config", "/etc/deepin-upgrade-manager/config.json", "the repo config file path")
+	_data    = flag.String("data", "/etc/deepin-upgrade-manager/ready/config.json", "the deepin v23 commit data config file path")
+	_action  = flag.String("action", "list", "the available actions: init, commit, rollback, list, cancel, setdefaultconfig")
 	_version = flag.String("version", "", "the version which rollback")
 	_rootDir = flag.String("root", "/", "the rootfs mount point")
 	_daemon  = flag.Bool("daemon", false, "start dbus service")
@@ -47,7 +49,7 @@ var (
 func main() {
 	flag.Parse()
 
-	conf, err := config.LoadConfig(*_config)
+	conf, err := config.LoadConfig(*_config, *_rootDir)
 	if err != nil {
 		fmt.Println("load config wrong:", err)
 		os.Exit(-1)
@@ -175,6 +177,15 @@ func handleAction(m *upgrader.Upgrader, c *config.Config) {
 			os.Exit(FAILED_PROCESS_EXISTS)
 		}
 		m.ResetGrub(util.LocalLangEnv())
+	case _ACTION_SET:
+		if !util.IsExists(*_data) {
+			logger.Error("data isn't exist")
+			os.Exit(FAILED_PROCESS_EXISTS)
+		}
+		err := m.SetReadyData(*_data)
+		if err != nil {
+			logger.Error(err)
+		}
 	}
 }
 

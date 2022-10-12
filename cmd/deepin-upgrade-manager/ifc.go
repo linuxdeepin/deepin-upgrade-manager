@@ -6,8 +6,10 @@ import (
 	"deepin-upgrade-manager/pkg/module/bootkitinfo"
 	"deepin-upgrade-manager/pkg/module/repo/branch"
 	"deepin-upgrade-manager/pkg/module/single"
+	"deepin-upgrade-manager/pkg/module/util"
 	"deepin-upgrade-manager/pkg/upgrader"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -25,7 +27,8 @@ type Manager struct {
 	running       bool
 	hasCall       bool
 	ActiveVersion string
-	repoUUID      string
+	RepoUUID      string
+	DefaultConfig string
 }
 
 func NewManager(config *config.Config, daemon bool) (*Manager, error) {
@@ -44,7 +47,8 @@ func NewManager(config *config.Config, daemon bool) (*Manager, error) {
 		upgrade:       upgrade,
 		ActiveVersion: config.ActiveVersion,
 		running:       false,
-		repoUUID:      uuid,
+		RepoUUID:      uuid,
+		DefaultConfig: upgrade.ReadyDataPath(),
 	}
 
 	if daemon {
@@ -205,4 +209,16 @@ func (m *Manager) GetGrubTitle(versions string) (string, *dbus.Error) {
 		return "", dbus.MakeFailedError(errors.New("must special version"))
 	}
 	return m.upgrade.GrubTitle(versions), nil
+}
+
+func (m *Manager) SetDefaultConfig(path string) *dbus.Error {
+	if !util.IsExists(path) {
+		logger.Errorf("%s does not exist.", path)
+		return dbus.MakeFailedError(fmt.Errorf("%s does not exist", path))
+	}
+	err := m.upgrade.SetReadyData(path)
+	if err != nil {
+		return dbus.MakeFailedError(err)
+	}
+	return nil
 }

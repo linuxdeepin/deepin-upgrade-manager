@@ -6,6 +6,7 @@ import (
 	"crypto/md5" // #nosec
 	"crypto/rand"
 	"deepin-upgrade-manager/pkg/logger"
+	"deepin-upgrade-manager/pkg/module/attr"
 	"errors"
 	"fmt"
 	"io"
@@ -76,6 +77,14 @@ fix:
 func IsExists(filename string) bool {
 	_, err := os.Stat(filename)
 	if err == nil || os.IsExist(err) {
+		return true
+	}
+	return false
+}
+
+func IsEmptyFile(filename string) bool {
+	fi, err := os.Stat(filename)
+	if err != nil || fi.Size() == 0 {
 		return true
 	}
 	return false
@@ -284,6 +293,49 @@ func IsDir(path string) bool {
 	return true
 }
 
+func RemoveAttr(src string) error {
+	fd, err := os.OpenFile(src, os.O_RDONLY, 0666)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		fd.Close()
+	}()
+	attrs, err := attr.GetAttr(fd)
+	if err != nil {
+		return err
+	}
+	return attr.UnsetAttr(fd, attrs)
+}
+
+func RemoveDirAttr(orig string) error {
+	fiList, err := ioutil.ReadDir(orig)
+	if err != nil {
+		return err
+	}
+
+	for _, fi := range fiList {
+		srcSub := filepath.Join(orig, fi.Name())
+		fiStat, ok := fi.Sys().(*syscall.Stat_t)
+		if !ok {
+			return fmt.Errorf("failed to get raw stat for: %s", srcSub)
+		}
+
+		switch {
+		case fiStat.Mode&syscall.S_IFDIR == syscall.S_IFDIR:
+			err = RemoveDirAttr(srcSub)
+		case fiStat.Mode&syscall.S_IFREG == syscall.S_IFREG:
+			err = RemoveAttr(srcSub)
+		default:
+			logger.Debug("unknown file type:", srcSub)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func GetRealDirList(list []string, rootDir, snapDir string) ([]string, []string) {
 	var newDirList, newFileList, rootList []string
 	for _, v := range list {
@@ -317,7 +369,7 @@ func GetRealDirList(list []string, rootDir, snapDir string) ([]string, []string)
 					real)
 			}
 		}
-		if IsDir(v) {
+		if IsDir(real) {
 			newDirList = append(newDirList, v)
 		} else {
 			newFileList = append(newFileList, v)

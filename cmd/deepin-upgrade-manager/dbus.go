@@ -76,11 +76,20 @@ func (m *Manager) makeProps() map[string]map[string]*prop.Prop {
 				},
 			},
 			"RepoUUID": &prop.Prop{
-				Value:    &m.repoUUID,
+				Value:    &m.RepoUUID,
 				Writable: false,
 				Emit:     prop.EmitTrue,
 				Callback: func(c *prop.Change) *dbus.Error {
 					logger.Debugf("RepoUUID changed: %s -> %s", c.Name, c.Value)
+					return nil
+				},
+			},
+			"DefaultConfig": &prop.Prop{
+				Value:    &m.DefaultConfig,
+				Writable: false,
+				Emit:     prop.EmitTrue,
+				Callback: func(c *prop.Change) *dbus.Error {
+					logger.Debugf("DefaultConfig changed: %s -> %s", c.Name, c.Value)
 					return nil
 				},
 			},

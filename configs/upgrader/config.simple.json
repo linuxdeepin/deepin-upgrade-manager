@@ -13,22 +13,10 @@
       "config_dir": "/persistent/osroot/config",
       "stage_dir": "/persistent/osroot/cache",
       "snapshot_dir": "/persistent/osroot/snapshot",
+      "data_origin": "",
       "subscribe_list": [
-        "/boot",
-        "/usr",
-        "/etc",
-        "/var/lib/apt",
-        "/var/lib/dkms",
-        "/var/lib/dpkg",
-        "/var/lib/man-db",
-        "/var/lib/initramfs-tools",
-        "/var/lib/systemd/deb-systemd-helper-enabled",
-        "/var/lib/selinux"
       ],
       "filter_list": [
-        "/usr/lib/locale/locale-archive",
-        "/etc/locale.gen",
-        "/usr/share/deepin-defender/localcache.db"
       ]
     }
   ]

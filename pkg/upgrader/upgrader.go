@@ -270,6 +270,8 @@ func (c *Upgrader) Commit(newVersion, subject string, useSysData bool, envVars [
 			}
 		}
 	}
+	c.conf.SetVersionConfig(newVersion)
+	c.conf.LoadReadyData()
 	if len(subject) == 0 {
 		subject = fmt.Sprintf("Release %s", newVersion)
 	}
@@ -497,16 +499,19 @@ func (c *Upgrader) Rollback(version string,
 		// checkout specified version file
 		err = c.Snapshot(backVersion)
 		if err != nil {
-			exitCode = _STATE_TY_FAILED_NO_REPO
+			exitCode = _STATE_TY_FAILED_OSTREE_ROLLBACK
 			goto failure
 		}
-
+		// need load rollback version config
+		err := c.conf.LoadVersionData(backVersion, c.rootMP)
+		if err != nil {
+			exitCode = _STATE_TY_FAILED_OSTREE_ROLLBACK
+			goto failure
+		}
 		// update the mount of the first repo
 		mountedPointList, err = c.UpdataMount(c.conf.RepoList[0], backVersion)
 		if err != nil {
 			exitCode = _STATE_TY_FAILED_HANDLING_MOUNTS
-			c.recordsInfo.SetFailed(c.conf.ActiveVersion)
-			err := util.CopyFile(filepath.Join(c.rootMP, LocalNotifyDesktopPath), filepath.Join(c.rootMP, AutoStartDesktopPath), false)
 			if err != nil {
 				logger.Warning(err)
 			}
@@ -522,7 +527,7 @@ func (c *Upgrader) Rollback(version string,
 			}
 		}
 		// rollback ending and need notify
-		err := util.CopyFile(filepath.Join(c.rootMP, LocalNotifyDesktopPath), filepath.Join(c.rootMP, AutoStartDesktopPath), false)
+		err = util.CopyFile(filepath.Join(c.rootMP, LocalNotifyDesktopPath), filepath.Join(c.rootMP, AutoStartDesktopPath), false)
 		if err != nil {
 			logger.Warning(err)
 		}
@@ -562,6 +567,10 @@ func (c *Upgrader) Rollback(version string,
 	logger.Info("successed run rollback action")
 	return int(exitCode), nil
 failure:
+	if int(exitCode) < int(_STATE_TY_FAILED_NO_REPO) {
+		c.recordsInfo.SetFailed(c.conf.ActiveVersion)
+		util.CopyFile(filepath.Join(c.rootMP, LocalNotifyDesktopPath), filepath.Join(c.rootMP, AutoStartDesktopPath), false)
+	}
 	c.SendingSignal(evHandler, _OP_TY_ROLLBACK_PREPARING_END, exitCode, version, err.Error())
 	return int(exitCode), err
 }
@@ -717,6 +726,7 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 	var rollbackDirList []string
 	snapDir := filepath.Join(repoConf.SnapshotDir, version)
 	realDirSubscribeList, realFileSubcribeList := util.GetRealDirList(repoConf.SubscribeList, c.rootMP, snapDir)
+	logger.Debugf("will recovery dirs %v, files %v", realDirSubscribeList, realFileSubcribeList)
 	var err error
 	defer func() {
 		// if failed update, restoring the system
@@ -741,13 +751,23 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 			if util.IsExists(oldDir) {
 				err = os.RemoveAll(oldDir)
 				if err != nil {
-					logger.Warning("failed remove dir, err:", err)
+					// When failure to delete extended attributes 'i' delete again
+					util.RemoveDirAttr(oldDir)
+					err = os.RemoveAll(oldDir)
+					if err != nil {
+						logger.Warning("failed remove dir, err:", err)
+					}
 				}
 			}
 			if util.IsExists(newDir) {
 				err = os.RemoveAll(newDir)
 				if err != nil {
-					logger.Warning("failed remove dir, err:", err)
+					// When failure to delete extended attributes 'i' delete again
+					util.RemoveDirAttr(newDir)
+					err = os.RemoveAll(newDir)
+					if err != nil {
+						logger.Warning("failed remove dir, err:", err)
+					}
 				}
 			}
 		}
@@ -827,7 +847,7 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 			snapFile := filepath.Join(snapDir, realFile)
 			logger.Debugf("start rolling back file, realfile:%s, snapFile:%s",
 				realFile, snapFile)
-			err := util.CopyFile(snapFile, realFile, false)
+			err := util.CopyFile(filepath.Join(c.rootMP, snapFile), filepath.Join(c.rootMP, realFile), false)
 			if err != nil {
 				return err
 			}
@@ -916,6 +936,9 @@ func (c *Upgrader) isDirSpaceEnough(mountpoint, rootDir string, subscribeList []
 
 func (c *Upgrader) updataLoaclMount(snapDir string) (mountpoint.MountPointList, error) {
 	fstabDir := filepath.Clean(filepath.Join(snapDir, "/etc/fstab"))
+	if !util.IsExists(fstabDir) || util.IsEmptyFile(fstabDir) {
+		fstabDir = filepath.Clean(filepath.Join(c.rootMP, "/etc/fstab"))
+	}
 	_, err := ioutil.ReadFile(fstabDir)
 	var mountedPointList mountpoint.MountPointList
 	if err != nil {
@@ -939,7 +962,7 @@ func (c *Upgrader) updataLoaclMount(snapDir string) (mountpoint.MountPointList, 
 			info.SrcPoint, filepath.Clean(filepath.Join(c.rootMP, info.DestPoint)))
 		m := c.mountInfos.Match(filepath.Clean(filepath.Join(c.rootMP, info.DestPoint)))
 		if m != nil && !info.Bind {
-			if m.Partition != info.SrcPoint {
+			if m.Partition != info.SrcPoint || strings.Contains(m.Options, "ro") {
 				logger.Infof("the %s is mounted %s, not mounted correctly and needs to be unmouted",
 					m.Partition, m.MountPoint)
 				newInfo := &mountpoint.MountPoint{
@@ -1148,6 +1171,14 @@ func (c *Upgrader) RepoMountpointAndUUID() (string, string, error) {
 		}
 	}
 	return repoMountPoint, uuid, nil
+}
+
+func (c *Upgrader) SetReadyData(path string) error {
+	return c.conf.SetReadyData(path)
+}
+
+func (c *Upgrader) ReadyDataPath() string {
+	return c.conf.ReadyDataPath()
 }
 
 func (c *Upgrader) ResetGrub(envVars []string) {

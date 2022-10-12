@@ -1,0 +1,16 @@
+target:
+  replace_dirs:
+       - "/boot"
+       - "/usr"
+       - "/etc"
+       - "/var/lib/apt"
+       - "/var/lib/dkms"
+       - "/var/lib/dpkg"
+       - "/var/lib/man-db"
+       - "/var/lib/initramfs-tools"
+       - "/var/lib/systemd/deb-systemd-helper-enabled"
+       - "/var/lib/selinux"
+  migrate_dirs:
+       - "/usr/lib/locale/locale-archive"
+       - "/etc/locale.gen"
+       - "/usr/share/deepin-defender/localcache.db"
