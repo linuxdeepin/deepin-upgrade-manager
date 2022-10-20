@@ -676,6 +676,9 @@ func CopyDir(src, dst string, filterDirs, filterFiles []string, enableHardlink b
 		}
 
 		switch {
+		case fiStat.Mode&syscall.S_IFSOCK == syscall.S_IFSOCK:
+			logger.Debug("sock files need to be filtered:", srcSub)
+			continue
 		case fiStat.Mode&syscall.S_IFLNK == syscall.S_IFLNK:
 			err = Symlink(srcSub, dstSub)
 		case fiStat.Mode&syscall.S_IFCHR == syscall.S_IFCHR:
@@ -737,6 +740,9 @@ func CopyFile2(src, dst string, sfi os.FileInfo, enableHardlink bool) error {
 }
 
 func IsFileSame(file1, file2 string) (bool, error) {
+	if !IsExists(file2) || !IsExists(file1) {
+		return false, nil
+	}
 	equal, err := IsFileSameByInode(file1, file2)
 	if err != nil {
 		return false, err
@@ -1113,4 +1119,20 @@ func SortSubDir(dirs []string) []string {
 		}
 	}
 	return dirs
+}
+
+func IsDiffInList(src, dst []string) []string {
+	var diff []string
+	for _, v := range dst {
+		if IsRootSame(src, v) {
+			continue
+		} else {
+			diff = append(diff, v)
+		}
+	}
+	return diff
+}
+
+func FullNeedFilters() []string {
+	return []string{"/media", "/proc", "/dev", "/sys", "/tmp", "/run"}
 }

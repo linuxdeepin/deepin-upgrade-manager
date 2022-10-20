@@ -602,6 +602,10 @@ func (c *Upgrader) repoCommit(repoConf *config.RepoConfig, newVersion, subject s
 		if err != nil || !isEnough {
 			return err
 		}
+		// if rollback "/", need filter '"/media", "/proc", "/dev", "/sys", "/tmp", "/run"'
+		if util.IsItemInList("/", repoConf.SubscribeList) {
+			repoConf.FilterList = append(repoConf.FilterList, util.IsDiffInList(repoConf.FilterList, util.FullNeedFilters())...)
+		}
 		err = c.copyRepoData(c.rootMP, dataDir, repoConf.SubscribeList, repoConf.FilterList)
 		if err != nil {
 			return err
@@ -724,6 +728,12 @@ func (c *Upgrader) handleRepoRollbak(realDir, snapDir, version string,
 
 func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) error {
 	var rollbackDirList []string
+
+	// if rollback "/", need filter '"/media", "/proc", "/dev", "/sys", "/tmp", "/run"'
+	if util.IsItemInList("/", repoConf.SubscribeList) {
+		repoConf.FilterList = append(repoConf.FilterList, util.IsDiffInList(repoConf.FilterList, util.FullNeedFilters())...)
+	}
+
 	snapDir := filepath.Join(repoConf.SnapshotDir, version)
 	realDirSubscribeList, realFileSubcribeList := util.GetRealDirList(repoConf.SubscribeList, c.rootMP, snapDir)
 	logger.Debugf("will recovery dirs %v, files %v", realDirSubscribeList, realFileSubcribeList)
@@ -781,6 +791,7 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 			}
 		}
 	}
+
 	// hardlink need to filter file or dir to prepare dir
 	for _, dir := range rollbackDirList {
 		dirRoot := filepath.Dir(dir)
@@ -861,12 +872,13 @@ func (c *Upgrader) copyRepoData(rootDir, dataDir string,
 	subscribeList []string, filterList []string) error {
 	//need filter '/usr/.v23'
 	repoCacheDir := filepath.Join(c.rootMP, c.conf.CacheDir)
+	os.Mkdir(repoCacheDir, 0755)
 	filterList = append(filterList, repoCacheDir)
 
 	for _, dir := range subscribeList {
 		srcDir := filepath.Join(rootDir, dir)
 		filterDirs, filterFiles := util.HandlerFilterList(rootDir, srcDir, filterList)
-
+		logger.Debugf("the filter directory path is %s, the filter file path is %s", filterDirs, filterFiles)
 		if !util.IsExists(srcDir) {
 			logger.Info("[copyRepoData] src dir empty:", srcDir)
 			continue
