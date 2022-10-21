@@ -5,6 +5,7 @@ import (
 	"deepin-upgrade-manager/pkg/logger"
 	"deepin-upgrade-manager/pkg/module/dirinfo"
 	"deepin-upgrade-manager/pkg/module/diskinfo"
+	"deepin-upgrade-manager/pkg/module/util"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -48,6 +49,17 @@ func (fs FsInfoList) MatchDestPoint(point string) FsInfo {
 		}
 	}
 	return info
+}
+
+func (fs FsInfoList) IsInFstabPoint(rootdir, point string) bool {
+	for _, v := range fs {
+		src := util.TrimRootdir(rootdir, v.SrcPoint)
+		dst := util.TrimRootdir(rootdir, v.DestPoint)
+		if dst == point || src == point {
+			return true
+		}
+	}
+	return false
 }
 
 func getPartiton(spec string, dsInfos diskinfo.DiskIDList) (string, string, error) {

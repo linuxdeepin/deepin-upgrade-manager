@@ -38,7 +38,7 @@ const (
 
 var (
 	_config  = flag.String("config", "/etc/deepin-upgrade-manager/config.json", "the repo config file path")
-	_data    = flag.String("data", "/etc/deepin-upgrade-manager/ready/config.json", "the deepin v23 commit data config file path")
+	_data    = flag.String("data", "/etc/deepin-upgrade-manager/ready/config.yaml	`", "the deepin v23 commit data config file path")
 	_action  = flag.String("action", "list", "the available actions: init, commit, rollback, list, cancel, setdefaultconfig")
 	_version = flag.String("version", "", "the version which rollback")
 	_rootDir = flag.String("root", "/", "the rootfs mount point")

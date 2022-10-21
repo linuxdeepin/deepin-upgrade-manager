@@ -933,7 +933,13 @@ func TrimRootdir(rootDir, src string) string {
 	if len(rootDir) != 1 && strings.HasPrefix(src, rootDir) {
 		// need delete last '/'
 		rootDir = strings.TrimSuffix(rootDir, "/")
-		return strings.TrimPrefix(src, rootDir)
+		dir := strings.TrimPrefix(src, rootDir)
+		if len(dir) == 0 {
+			return rootDir
+		} else {
+			return dir
+		}
+
 	} else {
 		return src
 	}
@@ -952,8 +958,14 @@ func HandlerFilterList(rootDir, realDir string, filterList []string) (filterDirs
 		}
 		if strings.HasPrefix(real, realDir) {
 			if fi.IsDir() {
+				if IsItemInList(real, filterDirs) {
+					continue
+				}
 				filterDirs = append(filterDirs, real)
 			} else {
+				if IsItemInList(real, filterFiles) {
+					continue
+				}
 				filterFiles = append(filterFiles, real)
 			}
 		}
@@ -1119,18 +1131,6 @@ func SortSubDir(dirs []string) []string {
 		}
 	}
 	return dirs
-}
-
-func IsDiffInList(src, dst []string) []string {
-	var diff []string
-	for _, v := range dst {
-		if IsRootSame(src, v) {
-			continue
-		} else {
-			diff = append(diff, v)
-		}
-	}
-	return diff
 }
 
 func FullNeedFilters() []string {

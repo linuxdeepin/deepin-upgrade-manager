@@ -382,7 +382,7 @@ func (c Upgrader) GrubTitle(version string) string {
 		commitName = fmt.Sprintf("Rollback to %s", version)
 		logger.Warning("failed get commit time, err:", err)
 	} else {
-		commitName = systemName + " " + MinorVersion + " " + "(" + strings.ReplaceAll(time, "-", "/") + ")"
+		commitName = systemName + " " + MinorVersion + " " + "(" + strings.Replace(time, "-", "/", -1) + ")"
 	}
 	return commitName
 }
@@ -602,10 +602,8 @@ func (c *Upgrader) repoCommit(repoConf *config.RepoConfig, newVersion, subject s
 		if err != nil || !isEnough {
 			return err
 		}
-		// if rollback "/", need filter '"/media", "/proc", "/dev", "/sys", "/tmp", "/run"'
-		if util.IsItemInList("/", repoConf.SubscribeList) {
-			repoConf.FilterList = append(repoConf.FilterList, util.IsDiffInList(repoConf.FilterList, util.FullNeedFilters())...)
-		}
+		// need handle filter dirs
+		repoConf.FilterList = append(repoConf.FilterList, c.getFilterList(repoConf.FilterList, repoConf.SubscribeList)...)
 		err = c.copyRepoData(c.rootMP, dataDir, repoConf.SubscribeList, repoConf.FilterList)
 		if err != nil {
 			return err
@@ -618,6 +616,35 @@ func (c *Upgrader) repoCommit(repoConf *config.RepoConfig, newVersion, subject s
 		return err
 	}
 	return nil
+}
+
+func (c *Upgrader) getFilterList(filterlist, sublist []string) []string {
+	var filterList []string
+	if util.IsItemInList("/", sublist) {
+		filterList = append(filterList, util.FullNeedFilters()...)
+	}
+	for _, fs := range c.fsInfo {
+		for _, filter := range filterlist {
+			logger.Debugf("v.DestPoint:%s, v.SrcPoint:%s,point:%s", fs.DestPoint, fs.SrcPoint, filter)
+			// ex: '/pesistent/home /home' '/pesistent/home/uos/A'
+			// ex: '/pesistent/home /home' '/home/uos/A'
+			// ex: '/pesistent/home /home' '/persistent'
+			if fs.Bind {
+				src := util.TrimRootdir(c.rootMP, fs.SrcPoint)
+				dst := util.TrimRootdir(c.rootMP, fs.DestPoint)
+				if strings.HasPrefix(filter, src) {
+					filterList = append(filterList, filepath.Join(strings.TrimPrefix(filter, src), dst))
+				}
+				if strings.HasPrefix(filter, dst) {
+					filterList = append(filterList, filepath.Join(strings.TrimPrefix(filter, dst), src))
+				}
+				if strings.HasPrefix(src, filter) {
+					filterList = append(filterList, src, dst)
+				}
+			}
+		}
+	}
+	return filterList
 }
 
 func (c *Upgrader) repoSnapShot(repoConf *config.RepoConfig, version string) error {
@@ -682,11 +709,16 @@ func (c *Upgrader) enableSnapshotBoot(snapDir, version string) error {
 // @param     version         	string         		"snapshot version, ex:v23.0.0.1"
 // @param     rollbackDirList   *[]string      		"rollback produces tmp files, ex:/etc/.old"
 // @param     HandlerDir   		function pointer    "file handler function pointer"
-func (c *Upgrader) handleRepoRollbak(realDir, snapDir, version string,
+func (c *Upgrader) handleRepoRollbak(realDir, snapDir, version string, filterMountedList []string,
 	rollbackDirList *[]string, HandlerDir func(src, dst, version, rootDir string, filter []string) (string, error)) error {
 	var filterDirs []string
 	var rollbackDir string
 	var err error
+	if util.IsItemInList(realDir, filterMountedList) {
+		logger.Debugf("need filter mount point %s", realDir)
+		return nil
+	}
+
 	// need trim root dir
 	realDir = util.TrimRootdir(c.rootMP, realDir)
 	list := c.mountInfos.Query(filepath.Join(c.rootMP, realDir))
@@ -718,7 +750,7 @@ func (c *Upgrader) handleRepoRollbak(realDir, snapDir, version string,
 	}
 
 	for _, l := range filterDirs {
-		err = c.handleRepoRollbak(l, snapDir, version, rollbackDirList, HandlerDir)
+		err = c.handleRepoRollbak(l, snapDir, version, filterMountedList, rollbackDirList, HandlerDir)
 		if err != nil {
 			return err
 		}
@@ -726,13 +758,39 @@ func (c *Upgrader) handleRepoRollbak(realDir, snapDir, version string,
 	return nil
 }
 
-func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) error {
-	var rollbackDirList []string
-
-	// if rollback "/", need filter '"/media", "/proc", "/dev", "/sys", "/tmp", "/run"'
-	if util.IsItemInList("/", repoConf.SubscribeList) {
-		repoConf.FilterList = append(repoConf.FilterList, util.IsDiffInList(repoConf.FilterList, util.FullNeedFilters())...)
+func (c *Upgrader) isSameFilterPartDir(filterdir string, subscribeList []string) bool {
+	filterPart, _ := dirinfo.GetDirPartition(filepath.Join(c.rootMP, filterdir))
+	for _, dir := range subscribeList {
+		if strings.HasPrefix(filepath.Join(c.rootMP, filterdir), filepath.Join(c.rootMP, dir)) {
+			dirPart, _ := dirinfo.GetDirPartition(filepath.Join(c.rootMP, dir))
+			if dirPart != filterPart {
+				return false
+			}
+		}
 	}
+	return true
+}
+
+func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) error {
+	var FilterPartMountedList, rollbackDirList []string
+	repoConf.FilterList = append(repoConf.FilterList, c.getFilterList(repoConf.FilterList, repoConf.SubscribeList)...)
+	logger.Debugf("need filter dir list %v", repoConf.FilterList)
+	for _, v := range repoConf.FilterList {
+		//to determine whether filter dirs is in fstab
+		if !c.fsInfo.IsInFstabPoint(c.rootMP, v) {
+			continue
+		}
+		//to determine whether a rollback partition and filter partitions are the same
+		if c.isSameFilterPartDir(v, repoConf.SubscribeList) {
+			continue
+		}
+
+		if util.IsItemInList(v, FilterPartMountedList) {
+			continue
+		}
+		FilterPartMountedList = append(FilterPartMountedList, filepath.Join(c.rootMP, v))
+	}
+	logger.Debugf("need filter part mount list %v", FilterPartMountedList)
 
 	snapDir := filepath.Join(repoConf.SnapshotDir, version)
 	realDirSubscribeList, realFileSubcribeList := util.GetRealDirList(repoConf.SubscribeList, c.rootMP, snapDir)
@@ -744,7 +802,7 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 			c.recordsInfo.SetRestore()
 			logger.Warning("failed rollback, recover rollback action")
 			for _, dir := range realDirSubscribeList {
-				err := c.handleRepoRollbak(dir, snapDir, version, &rollbackDirList, util.HandlerDirRecover)
+				err := c.handleRepoRollbak(dir, snapDir, version, FilterPartMountedList, &rollbackDirList, util.HandlerDirRecover)
 				if err != nil {
 					logger.Error("failed recover rollback, err:", err)
 				}
@@ -785,7 +843,7 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 	// prepare the repo file under the system path
 	if c.recordsInfo.IsNeedPrepareRepoFile() {
 		for _, dir := range realDirSubscribeList {
-			err = c.handleRepoRollbak(dir, snapDir, version, &rollbackDirList, util.HandlerDirPrepare)
+			err = c.handleRepoRollbak(dir, snapDir, version, FilterPartMountedList, &rollbackDirList, util.HandlerDirPrepare)
 			if err != nil {
 				return err
 			}
@@ -838,14 +896,14 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 			bootDir = dir
 			continue
 		}
-		err = c.handleRepoRollbak(dir, snapDir, version, &rollbackDirList, util.HandlerDirRollback)
+		err = c.handleRepoRollbak(dir, snapDir, version, FilterPartMountedList, &rollbackDirList, util.HandlerDirRollback)
 		if err != nil {
 			return err
 		}
 	}
 	// last replace /boot dir, protect system boot
 	if len(bootDir) != 0 {
-		err = c.handleRepoRollbak(bootDir, snapDir, version, &rollbackDirList, util.HandlerDirRollback)
+		err = c.handleRepoRollbak(bootDir, snapDir, version, FilterPartMountedList, &rollbackDirList, util.HandlerDirRollback)
 		if err != nil {
 			return err
 		}

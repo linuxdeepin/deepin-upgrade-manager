@@ -110,3 +110,20 @@ func GetDirPartition(dirPath string) (string, error) {
 	partition := strings.TrimSpace(arrCmd[0])
 	return partition, nil
 }
+
+func IsItemInPartiton(item string, list []string) bool {
+	rootPartition, _ := GetDirPartition(item)
+	for _, v := range list {
+		if !util.IsExists(v) {
+			continue
+		}
+		partition, err := GetDirPartition(item)
+		if err != nil {
+			continue
+		}
+		if v == item || rootPartition == partition {
+			return true
+		}
+	}
+	return false
+}
