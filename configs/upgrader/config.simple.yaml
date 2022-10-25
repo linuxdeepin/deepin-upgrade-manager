@@ -10,7 +10,7 @@ target:
        - "/var/lib/initramfs-tools"
        - "/var/lib/systemd/deb-systemd-helper-enabled"
        - "/var/lib/selinux"
-  filter_list:
+  hold_list:
        - "/usr/lib/locale/locale-archive"
        - "/etc/locale.gen"
        - "/usr/share/deepin-defender/localcache.db"
