@@ -56,7 +56,7 @@ install-upgrader:
 	@cp -f ${PWD}/configs/upgrader/config.simple.json  ${DESTDIR}/etc/${PROG_UPGRADER}/config.json
 
 	@mkdir -p ${DESTDIR}/etc/${PROG_UPGRADER}/ready/
-	@cp -f ${PWD}/configs/upgrader/config.simple.yaml  ${DESTDIR}/etc/${PROG_UPGRADER}/ready/config.yaml
+	@cp -f ${PWD}/configs/upgrader/config.simple.yaml  ${DESTDIR}/etc/${PROG_UPGRADER}/ready/data.yaml
 
 	@mkdir -p ${DESTDIR}${VAR}/${PROG_BOOTKIT}/config
 	@cp -f ${PWD}/configs/upgrader/tool/atomic.json  ${DESTDIR}${VAR}/${PROG_BOOTKIT}/config/atomic.json
@@ -143,7 +143,7 @@ uninstall-upgrader:
 	@rm -f ${DESTDIR}${PREFIX}/share/dbus-1/system.d/${PROG_DBUS}.conf
 	@rm -f ${DESTDIR}${PREFIX}/share/dbus-1/system-services/${PROG_DBUS}.service
 	@rm -f ${DESTDIR}/etc/${PROG_UPGRADER}/config.json
-	@rm -f ${DESTDIR}/etc/${PROG_UPGRADER}/ready/config.yaml
+	@rm -f ${DESTDIR}/etc/${PROG_UPGRADER}/ready/data.yaml
 	@rm -f ${DESTDIR}${PREFIX}/share/initramfs-tools/hooks/ostree
 	@rm -f ${DESTDIR}${PREFIX}/share/initramfs-tools/hooks/${PROG_UPGRADER}
 	@rm -f ${DESTDIR}${VAR}/${PROG_UPGRADER}/scripts/${PROG_UPGRADER}

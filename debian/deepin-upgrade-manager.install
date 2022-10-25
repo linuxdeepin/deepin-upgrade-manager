@@ -1,7 +1,7 @@
 /usr/sbin/deepin-upgrade-manager
 /usr/share/dbus-1/*
 /etc/deepin-upgrade-manager/config.json
-/etc/deepin-upgrade-manager/ready/config.yaml
+/etc/deepin-upgrade-manager/ready/data.yaml
 /usr/share/initramfs-tools/hooks/ostree
 /usr/share/initramfs-tools/hooks/deepin-upgrade-manager
 /usr/share/initramfs-tools/scripts/init-bottom/deepin-upgrade-manager

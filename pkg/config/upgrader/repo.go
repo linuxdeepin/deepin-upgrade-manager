@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	DATA_YAML_PATH   = "ready/config.yaml"
+	DATA_YAML_PATH   = "ready/data.yaml"
 	LOCAL_CONFIG_DIR = "/var/lib/deepin-upgrade-manager/config/"
 )
 
@@ -211,7 +211,7 @@ func (c *Config) LoadVersionData(version, rootDir string) error {
 	if !util.IsExists(c.dataname) || len(version) == 0 {
 		return fmt.Errorf("failed load version yaml config, path:%s, version:%s", c.dataname, version)
 	}
-	versionConfigPath := filepath.Join(rootDir, c.RepoList[0].ConfigDir, version, "config.yaml")
+	versionConfigPath := filepath.Join(rootDir, c.RepoList[0].ConfigDir, version, "data.yaml")
 	logger.Debug("load version config path: ", versionConfigPath)
 	c.LoadData(versionConfigPath)
 	c.Save()
@@ -224,7 +224,7 @@ func (c *Config) SetVersionConfig(version string) {
 	}
 	versionConfig := filepath.Join(c.RepoList[0].ConfigDir, version)
 	os.MkdirAll(versionConfig, 0750)
-	util.CopyFile(c.dataname, filepath.Join(versionConfig, "config.yaml"), false)
+	util.CopyFile(c.dataname, filepath.Join(versionConfig, "data.yaml"), false)
 }
 
 func (c *Config) ReadyDataPath() string {
