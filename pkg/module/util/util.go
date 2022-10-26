@@ -506,7 +506,6 @@ func Mkdir(srcDir, dstDir string) error {
 	if IsExists(dstDir) {
 		return nil
 	}
-
 	fi, err := os.Stat(srcDir)
 	if err != nil {
 		return err
@@ -515,12 +514,10 @@ func Mkdir(srcDir, dstDir string) error {
 	if err != nil {
 		return err
 	}
-
 	// set uid, gid, suid, sgid and sbit
 	if stat, ok := fi.Sys().(*syscall.Stat_t); ok {
 		fileMode := fi.Mode().Perm()
 		var isChanged bool
-
 		if stat.Mode&syscall.S_ISUID == syscall.S_ISUID {
 			fileMode |= os.ModeSetuid
 			isChanged = true
@@ -533,7 +530,12 @@ func Mkdir(srcDir, dstDir string) error {
 			fileMode |= os.ModeSticky
 			isChanged = true
 		}
-		if isChanged {
+		dstfi, err := os.Stat(dstDir)
+		if err != nil {
+			return err
+		}
+		// diff mode or mode is changed need chmod
+		if isChanged || dstfi.Mode() != fi.Mode() {
 			err = os.Chmod(dstDir, fileMode)
 			if err != nil {
 				return err
@@ -543,6 +545,7 @@ func Mkdir(srcDir, dstDir string) error {
 		if err != nil {
 			return err
 		}
+
 	} else {
 		return fmt.Errorf("failed to get raw stat for: %s", srcDir)
 	}

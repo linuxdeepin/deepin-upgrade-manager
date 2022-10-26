@@ -625,7 +625,6 @@ func (c *Upgrader) getFilterList(filterlist, sublist []string) []string {
 	}
 	for _, fs := range c.fsInfo {
 		for _, filter := range filterlist {
-			logger.Debugf("v.DestPoint:%s, v.SrcPoint:%s,point:%s", fs.DestPoint, fs.SrcPoint, filter)
 			// ex: '/pesistent/home /home' '/pesistent/home/uos/A'
 			// ex: '/pesistent/home /home' '/home/uos/A'
 			// ex: '/pesistent/home /home' '/persistent'
