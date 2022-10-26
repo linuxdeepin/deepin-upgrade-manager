@@ -6,6 +6,8 @@ import (
 	"github.com/godbus/dbus"
 )
 
+var msgRollBack = util.Tr("System Recovery")
+
 const (
 	NodifydbusDest      = "com.deepin.dde.Notification"
 	NodifydbusPath      = "/com/deepin/dde/Notification"
@@ -28,7 +30,7 @@ func SetNotifyText(text string) error {
 	var arg5 []string
 	var map_variable map[string]dbus.Variant
 	var arg7 int32
-	arg0 = "deepin-upgrade-manager"
+	arg0, _ = util.GetBootKitText(msgRollBack)
 	arg1 = 101
 	arg2 = "preferences-system"
 	arg3 = text
