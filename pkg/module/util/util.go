@@ -1091,6 +1091,16 @@ func GetTimeZoomDiff() string {
 	return timeDiff
 }
 
+func RemoveSameItemInSlice(list []string) []string {
+	var out []string
+	for _, v := range list {
+		if !IsItemInList(v, out) {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
 func VersionOrdinal(version string) string {
 	const maxByte = 1<<8 - 1
 	vo := make([]byte, 0, len(version)+8)

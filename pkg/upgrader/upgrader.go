@@ -604,6 +604,7 @@ func (c *Upgrader) repoCommit(repoConf *config.RepoConfig, newVersion, subject s
 		}
 		// need handle filter dirs
 		repoConf.FilterList = append(repoConf.FilterList, c.getFilterList(repoConf.FilterList, repoConf.SubscribeList)...)
+		repoConf.FilterList = util.RemoveSameItemInSlice(repoConf.FilterList)
 		err = c.copyRepoData(c.rootMP, dataDir, repoConf.SubscribeList, repoConf.FilterList)
 		if err != nil {
 			return err
@@ -628,16 +629,17 @@ func (c *Upgrader) getFilterList(filterlist, sublist []string) []string {
 			// ex: '/pesistent/home /home' '/pesistent/home/uos/A'
 			// ex: '/pesistent/home /home' '/home/uos/A'
 			// ex: '/pesistent/home /home' '/persistent'
+			// ex: '/boot/persistent /home/pesistent' '/home'
 			if fs.Bind {
 				src := util.TrimRootdir(c.rootMP, fs.SrcPoint)
 				dst := util.TrimRootdir(c.rootMP, fs.DestPoint)
 				if strings.HasPrefix(filter, src) {
-					filterList = append(filterList, filepath.Join(strings.TrimPrefix(filter, src), dst))
+					filterList = append(filterList, filepath.Join(dst, strings.TrimPrefix(filter, src)))
 				}
 				if strings.HasPrefix(filter, dst) {
-					filterList = append(filterList, filepath.Join(strings.TrimPrefix(filter, dst), src))
+					filterList = append(filterList, filepath.Join(src, strings.TrimPrefix(filter, dst)))
 				}
-				if strings.HasPrefix(src, filter) {
+				if strings.HasPrefix(src, filter) || strings.HasPrefix(dst, filter) {
 					filterList = append(filterList, src, dst)
 				}
 			}
@@ -773,6 +775,7 @@ func (c *Upgrader) isSameFilterPartDir(filterdir string, subscribeList []string)
 func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) error {
 	var FilterPartMountedList, rollbackDirList []string
 	repoConf.FilterList = append(repoConf.FilterList, c.getFilterList(repoConf.FilterList, repoConf.SubscribeList)...)
+	repoConf.FilterList = util.RemoveSameItemInSlice(repoConf.FilterList)
 	logger.Debugf("need filter dir list %v", repoConf.FilterList)
 	for _, v := range repoConf.FilterList {
 		//to determine whether filter dirs is in fstab
@@ -995,9 +998,12 @@ func (c *Upgrader) isDirSpaceEnough(mountpoint, rootDir string, subscribeList []
 	GB := 1024 * 1024 * 1024
 	free, _ := dirinfo.GetPartitionFreeSize(mountPart)
 
+	if (needSize + extraSize) > 0 {
+		needSize = needSize + extraSize
+	}
 	logger.Debugf("the %s partition free size:%.2f GB, extra size:%.2f GB, the need size is:%.2f GB", mountPart,
 		float64(free)/float64(GB), float64(extraSize)/float64(GB), float64(needSize)/float64(GB)+float64(extraSize)/float64(GB))
-	if uint64(needSize+extraSize) > free {
+	if needSize > int64(free) {
 		return false, errors.New("the current partition is out of space")
 	}
 	return true, nil
@@ -1317,13 +1323,13 @@ func (c *Upgrader) SendSystemNotice() error {
 		backMsg = fmt.Sprintf(text, msg)
 	}
 	if len(backMsg) != 0 {
-		time.Sleep(5 * time.Second) // wait for osd dbus
-		err := notify.SetNotifyText(backMsg)
+		metho := atomicUpgradeDest + ".CancelRollback"
+		err := grubServiceObj.Call(metho, 0).Store()
 		if err != nil {
 			logger.Warning("failed send system notice, err:", err)
 		}
-		metho := atomicUpgradeDest + ".CancelRollback"
-		return grubServiceObj.Call(metho, 0).Store()
+		time.Sleep(5 * time.Second) // wait for osd dbus
+		return notify.SetNotifyText(backMsg)
 	}
 	return nil
 }
