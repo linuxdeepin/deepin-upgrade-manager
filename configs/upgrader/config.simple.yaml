@@ -1,5 +1,5 @@
 target:
-  subscribe_list:
+  backup_list:
        - "/boot"
        - "/usr"
        - "/etc"
