@@ -36,7 +36,7 @@ for x in $(cat /proc/cmdline); do
 	esac
 done
 
-if [[ "x${back_version}" = "x" ] ||  [ "x${backup_uuid}" != "x" ]];then
+if [[ "x${back_version}" = "x" ]] ||  [[ "x${backup_uuid}" = "x" ]];then
 	exit 0
 fi
 

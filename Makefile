@@ -56,7 +56,7 @@ install-upgrader:
 	@cp -f ${PWD}/configs/upgrader/config.simple.json  ${DESTDIR}/etc/${PROG_UPGRADER}/config.json
 
 	@mkdir -p ${DESTDIR}/etc/${PROG_UPGRADER}/ready/
-	@cp -f ${PWD}/configs/upgrader/config.simple.yaml  ${DESTDIR}/etc/${PROG_UPGRADER}/ready/data.yaml
+	@cp -f ${PWD}/configs/upgrader/data.simple.yaml  ${DESTDIR}/etc/${PROG_UPGRADER}/ready/data.yaml
 
 	@mkdir -p ${DESTDIR}${VAR}/${PROG_BOOTKIT}/config
 	@cp -f ${PWD}/configs/upgrader/tool/atomic.json  ${DESTDIR}${VAR}/${PROG_BOOTKIT}/config/atomic.json
