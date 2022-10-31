@@ -734,6 +734,9 @@ func (c *Upgrader) handleRepoRollbak(realDir, snapDir, version string, filterMou
 			if l.MountPoint == filepath.Join(c.rootMP, realDir) {
 				continue
 			}
+			if util.IsRootSame(filterDirs, l.MountPoint) {
+				continue
+			}
 			if rootPartition != l.Partition {
 				filterDirs = append(filterDirs, l.MountPoint)
 			}

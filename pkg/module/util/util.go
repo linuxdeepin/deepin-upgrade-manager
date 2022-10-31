@@ -904,7 +904,7 @@ func HandlerDirRollback(src, dst, version, rootdir string, filter []string) (str
 		os.RemoveAll(dir)
 	}
 	err := Mkdir(dst, dir)
-	logger.Debugf("start replace the dir, src:%s, dir:%s, dst:%s, version:%s", src, dir, dst, version)
+	logger.Debugf("start replace the dir, src:%s, dir:%s, dst:%s, version:%s, newDir:%s", src, dir, dst, version, newDir)
 	if err != nil {
 		return "", err
 	}
