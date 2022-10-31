@@ -334,13 +334,15 @@ func (c *Upgrader) IsExistRepo() bool {
 
 func (c *Upgrader) UpdateGrub(envVars []string) (stateType, error) {
 	exitCode := _STATE_TY_SUCCESS
+	var errS strings.Builder
 	logger.Info("start update grub")
 	cmd := exec.Command("update-grub")
+	cmd.Stderr = &errS
 	cmd.Env = append(cmd.Env, envVars...)
-	_, err := cmd.Output()
+	out, err := cmd.Output()
 	if err != nil {
 		exitCode = _STATE_TY_FAILED_UPDATE_GRUB
-		logger.Warning(err)
+		logger.Warningf("failed update grub,err:%s, out:%s", errS.String(), string(out))
 	}
 	cmd.Wait()
 	return exitCode, err
@@ -508,6 +510,7 @@ func (c *Upgrader) Rollback(version string,
 			exitCode = _STATE_TY_FAILED_OSTREE_ROLLBACK
 			goto failure
 		}
+		c.recordsInfo.SetAfterRun(c.conf.RepoList[0].AfterRun)
 		// update the mount of the first repo
 		mountedPointList, err = c.UpdataMount(c.conf.RepoList[0], backVersion)
 		if err != nil {
@@ -1332,7 +1335,12 @@ func (c *Upgrader) SendSystemNotice() error {
 			logger.Warning("failed send system notice, err:", err)
 		}
 		time.Sleep(5 * time.Second) // wait for osd dbus
-		return notify.SetNotifyText(backMsg)
+		const selfRuning = "/usr/bin/deepin-upgrade-manager-tool --action=notify"
+		if len(c.recordsInfo.AferRun) > 0 && c.recordsInfo.AferRun != selfRuning {
+			return util.ExecCommand(c.recordsInfo.AferRun, []string{})
+		} else {
+			return notify.SetNotifyText(backMsg)
+		}
 	}
 	return nil
 }

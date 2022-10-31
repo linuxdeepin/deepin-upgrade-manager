@@ -7,8 +7,9 @@ import (
 )
 
 type Target struct {
-	Replace_dirs []string `yaml:"backup_list"`
-	Migrate_dirs []string `yaml:"hold_list"`
+	Backup_list []string `yaml:"backup_list"`
+	Hold_list   []string `yaml:"hold_list"`
+	After_run   string   `yaml:"after_run"`
 }
 
 type CommitTarget struct {

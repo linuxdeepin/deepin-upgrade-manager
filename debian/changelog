@@ -1,6 +1,6 @@
 deepin-upgrade-manager (1.0.10) unstable; urgency=medium
 
-  * Fix the LVM partition rollback failed 
+  * Fix the LVM partition rollback failed
 
  -- Chenghao Liu <liuchenghao@uniontech.com>  Fri, 16 Sep 2022 13:43:03 +0800
 

@@ -32,6 +32,7 @@ type RecordsInfo struct {
 	CurrentState    RecoredState `json:"CurrentState"`
 	RollbackVersion string       `json:"RollbackVersion"`
 	RepoMount       string       `json:"Repo_Mount_Point"`
+	AferRun         string       `json:"AfterRun"`
 	TimeOut         uint32       `json:"GrubTimeout"`
 
 	filename    string
@@ -73,6 +74,7 @@ func LoadRecords(rootfs, recordsfile, repoMount string) *RecordsInfo {
 	info.CurrentState = _UNKNOW_STATE
 	info.TimeOut = 2
 	info.RollbackVersion = ""
+	info.AferRun = ""
 	info.RepoMount = repoMount
 	defer info.save()
 	if util.IsExists(path) {
@@ -208,9 +210,13 @@ func (info *RecordsInfo) Remove() {
 	logger.Debugf("remove records rollback state file: %s", info.filename)
 }
 
+func (info *RecordsInfo) SetAfterRun(cmd string) {
+	info.AferRun = cmd
+	info.save()
+}
+
 func (info *RecordsInfo) ResetState(envVars []string) {
 	if len(info.RollbackVersion) != 0 {
-
 		currTimeOut, _ := info.grubManager.TimeOut()
 
 		if info.TimeOut != 0 && currTimeOut != info.TimeOut {

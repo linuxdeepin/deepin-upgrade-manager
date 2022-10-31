@@ -14,6 +14,7 @@
       "stage_dir": "/persistent/osroot/cache",
       "snapshot_dir": "/persistent/osroot/snapshot",
       "data_origin": "",
+      "after_run":"",
       "subscribe_list": [
       ],
       "filter_list": [

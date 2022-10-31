@@ -27,6 +27,7 @@ type RepoConfig struct {
 	SnapshotDir    string `json:"snapshot_dir"`
 	ConfigDir      string `json:"config_dir"`
 	StageDir       string `json:"stage_dir"`
+	AfterRun       string `json:"Afer_Run"`
 
 	SubscribeList []string `json:"subscribe_list"`
 	FilterList    []string `json:"filter_list"`
@@ -188,9 +189,10 @@ func (c *Config) LoadData(path string) {
 	}
 	c.RepoList[0].DataOrigin = path
 
-	c.AppendCommit(dataCf.Target.Replace_dirs, true)
-	c.AppendFilter(dataCf.Target.Migrate_dirs, true)
+	c.AppendCommit(dataCf.Target.Backup_list, true)
+	c.AppendFilter(dataCf.Target.Hold_list, true)
 
+	c.RepoList[0].AfterRun = dataCf.Target.After_run
 	for _, v := range c.RepoList[0].SubscribeList {
 		if strings.HasPrefix(c.RepoList[0].RepoMountPoint, v) {
 			c.AppendFilter([]string{filepath.Dir(c.RepoList[0].Repo)}, false)

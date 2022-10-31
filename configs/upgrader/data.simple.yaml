@@ -14,3 +14,4 @@ target:
        - "/usr/lib/locale/locale-archive"
        - "/etc/locale.gen"
        - "/usr/share/deepin-defender/localcache.db"
+  after_run: "/usr/bin/deepin-upgrade-manager-tool --action=notify"
