@@ -2,13 +2,22 @@
 
 \usepackage{enumitem}
 \usepackage{plantuml}
-\usepackage{diagbox} 
+\usepackage{diagbox}
 \usepackage{float}
+\usepackage{listings}
 
-\title{deepin 原子更新详细设计文档}
+\lstset{
+    language=Json
+    numbers=none,
+    frame=single
+}
+
+\title{原子更新概要设计文档}
 \author{liuchenghao}
 
 \setUTClassify{C级商密}
+
+\setUTVersion{V1.6}
 
 % 设置文档编号
 \setUTIndex{UT-YZGX20220224T_SYS026}
@@ -27,16 +36,24 @@
 \utMakeChangeLog{
   1.0 & 创建 & 刘成昊 & 2022-03-23 \\
   \hline
-  1.1 & 修改技术评审提出问题，详情见详细审计评审报告 & 刘成昊 & 2022-04-06 \\
+  1.1 & 修改技术评审提出问题，详情见概要审计评审报告 & 刘成昊 & 2022-04-06 \\
   \hline
   1.2 & 关键数据结构中增加DBus接口描述 & 刘成昊 & 2022-06-15 \\
+  \hline
+  1.3 & 增加套件工具模块设计 & 刘成昊 & 2022-06-24 \\
+  \hline
+  1.4 & 修改技术评审提出问题，详情见概要审计评审报告 & 刘成昊 & 2022-06-30 \\
+  \hline
+  1.5 & 关键数据结构增加 grub 界面显示字段，补充 initrd 调用二进制流程 & 刘成昊 & 2022-07-22 \\
+  \hline
+  1.6 & 增加设置回滚与提交的配置文件接口，详情请看变更记录V1.6 & 刘成昊 & 2022-09-29 \\
   \hline
 }
 \utMakeTOC
 
 \section{概述}
 \subsection{目的}
-本文档是针对 deepin 原子更新程序给出的系统详细设计文档，在本文档中，将给出 deepin 原子更新程序的设计原则、静态结构设计、动态流程设计、非功能性设计等内容。
+本文档是针对 deepin 原子更新程序给出的系统概要设计文档，在本文档中，将给出 deepin 原子更新程序的设计原则、静态结构设计、动态流程设计、非功能性设计等内容。
 \par
 deepin 系统更新程序的设计与实现是基于系统更新的需求分析，总体上将结合结构化设计的方法与文字描述，给出程序结构化的详细设计，与需求分析内容相对应，以保证系统设计的严谨性与可实现性。
 在结构化部分，本文档将主要采取 UML 语言的包图、类图、序列图等进行程序设计。
@@ -64,7 +81,7 @@ deepin 系统更新程序最初的目标是将系统状态的变更操作，如�
 当前阶段，基于时间和 deb 兼容的考虑，系统的变更仍在当前运行环境中进行，不构建 chroot 环境，但在系统变更前生成当前系统的快照。
 
 \subsection{设计原则}
-deepin 更新管理程序基于其需求，实现时需遵循以下原则: 
+deepin 更新管理程序基于其需求，实现时需遵循以下原则:
 \begin{itemize}[leftmargin=4em]
 \item 更新程序应采用管道/过滤器与面向对象相结合的设计风格，流程控制主要采用管道/过滤器风格，功能模块主要采用面向对象风格；
 \item 功能模块之间应避免相互调用，降低模块耦合度；
@@ -80,90 +97,187 @@ deepin 更新管理程序基于其需求，实现时需遵循以下原则:
 deepin 更新程序被设计为一个单文件程序，通过命令行参数来执行不同的流程。
 其中 init、commit、rollback、clean 等操作，应进行单例检查，不允许并行执行。
 
-整体结构如下: 
+整体结构如下:
 \begin{center}
   \begin{adjustbox}{scale=0.75}
     \begin{plantuml}
       @startuml
-      package "deepin-atomic-upgrade" {
-        package action {
-          [init] -[hidden]r-> [list]
-          [list] -[hidden]r-> [commit]
-          [commit] -[hidden]r-> [rollback]
-          [rollback] -[hidden]r-> [clean]
+      !include /home/mecry/Documents/design/common/C4_Component.puml
+      !include /home/mecry/Documents/design/common/C4_Container.puml
 
-          note top of [init]
-          初始化
-          end note
-          note top of [list]
-          版本展示
-          end note
-          note top of [commit]
-          版本提交
-          end note
-          note top of [rollback]
-          版本回滚
-          end note
-          note top of [clean]
-          版本清理
-          end note
-        }
-
-        package "modules" {
-          [upgrader]
-
-          note left of [upgrader]
-          更新管理模块，实现初始化、版本查询、
-          版本提交、版本回滚等接口
-          end note
-        }
-
-        package "objects" {
-          [init] -d-> [upgrader]
-          [list] -d-> [upgrader]
-          [commit] -d-> [upgrader]
-          [rollback] -d-> [upgrader]
-          [clean] -d-> [upgrader]
-
-          [repo] -[hidden]r-> [mountpoint]
-          [mountpoint] -[hidden]r-> [mountinfo]
-          [mountinfo] -[hidden]r-> [util]
-
-          [upgrader] -d-> [repo]
-          [upgrader] -d-> [mountpoint]
-          [upgrader] -d-> [mountinfo]
-          [upgrader] -d-> [util]
-
-          note bottom of [repo]
-          本地 repo 管理模块，
-          提供 repo 管理的抽象接口。
-          ostree、btrfs、zfs 实现这些接口
-          end note
-          note bottom of [mountpoint]
-          挂载点信息模块，实现挂载点
-          的挂载与卸载接口
-          end note
-          note bottom of [mountinfo]
-          /proc/self/mounts 解析模块，
-          并实现查询功能
-          end note
-          note bottom of [util]
-          通用功能接口，包括文件复制、
-          属主权限修改、字符设备创建
-          等功能
-          end note
-        }
+      Container(atomic, "deepin-atomic-upgrader", "Deepin Automic Upgrader") {
+        Component(options, "Command Options")
+        Component(ifc, "DBus Interface")
+        Lay_R(options, ifc)
       }
+      Container(kit, "deepin-boot-kit") {
+        Component(kitoptions, "Kit Command Options")
+        ComponentDb(spec, "Spec Config Pools")
+        Lay_R(kitoptions, spec)
+      }
+
+      Boundary(pkgs, "Packages") {
+        Boundary(controllers, "Controllers") {
+          Component(init, "Init")
+          Component(version, "Version")
+          Component(commit, "Commit")
+          Component(rollback, "Rollback")
+
+          Lay_R(init, version)
+          Lay_R(commit, rollback)
+        }
+
+        Boundary(modules, "Modules") {
+          Component(repo, "Repo Manager") {
+            Component(ostree, "OSTree Backend")
+            Component(btrfs, "Btrfs Backend")
+            Component(zfs, "ZFS Backend")
+
+            Lay_R(ostree, btrfs)
+            Lay_R(btrfs, zfs)
+          }
+          Component(fstab, "FSTab")
+          Component(mount, "MountInfo")
+          Component(rootfs, "Rootfs")
+          Component(log, "Log")
+          Component(config, "Configurations")
+
+          Component(derivation, "Version Derivation")
+          Container(bootMenuSpec, "Boot Menu Spec Parser")
+          Container(rollbackSpec, "Rollback Spec Parser")
+          Container(initrd, "initrd Spec Parser")
+
+          Lay_R(config, log)
+          Lay_R(log, derivation)
+          Lay_D(config, fstab)
+          Lay_R(fstab, mount)
+          Lay_R(mount, bootMenuSpec)
+          Lay_D(fstab, rootfs)
+          Lay_R(rootfs, rollbackSpec)
+
+          Lay_D(initrd, repo)
+          Lay_D(derivation, bootMenuSpec)
+          Lay_D(bootMenuSpec, rollbackSpec)
+          Lay_D(rollbackSpec, initrd)
+        }
+
+        Lay_D(controllers, modules)
+      }
+
+      Rel_D(atomic, controllers, "uses")
+      Rel_D(atomic, kit, "uses")
+      Rel_D(kit, derivation, "uses")
+      Rel_D(kit, bootMenuSpec, "uses")
+      Rel_D(kit, rollbackSpec, "uses")
+      Rel_D(kit, initrd, "uses")
+      Rel_D(controllers, modules, "uses")
       @enduml
     \end{plantuml}
   \end{adjustbox}
 
-  图 2-1 更新程序结构
+  图 2-1 整体结构
 \end{center}
+
+更新程序主要由外部调用，内部模块，与引导管理三个部分组成。
+
+\paragraph{外部调用}
+deepin-atomic-upgrader 对外接口，由 dbus 接口与终端命令行组成。
+\begin{itemize}[leftmargin=4em]
+  \item Command Options: 更新程序支持用户在终端输入的调用;
+  \item DBus Interface: 更新程序在被外部程序调用时通过dbus接口来实现;
+\end{itemize}
+
+\paragraph{引导管理}
+
+更新程序的 grub 引导显示与 inird 回滚的被调用逻辑是通过 deepin-boot-kit 程序进行管理。
+
+\paragraph{内部模块}
+更新程序的内部实现是通过 Packages 来管理，其主要分外部调用接口与内部模块实现，其主要部分说明如下：
+
+\begin{itemize}[leftmargin=4em]
+  \item Commit: 提交当前系统至仓库的接口;
+  \item Rollback: 回滚系统至指定版本接口;
+  \item MountInfo: 获取当前系统实时分区挂载信;
+  \item Boot Menu Spec Parser: 当前系统引导菜单的显示，有更新程序显示内容，deepin-boot-kit 来规定内容格式;
+  \item Repo Manager: 更新程序内部的仓库管理，提供处理仓库的基础命令;
+\end{itemize}
+
+\subsubsection{引导套件设计}
+deepin 引导套件被设计为一个管理grub的框架，使用其框架的所有工具需要遵循其规则。
+
+整体结构如下：
+\begin{center}
+  \begin{adjustbox}{scale=0.75}
+    \begin{plantuml}
+    @startuml
+    package "deepin-boot-kit" {
+        usecase "spec pool"
+        usecase "shell pool"
+
+        [version generator] -[hidden]r-> [submenu spec]
+        [spec pool] -r-> [submenu spec]
+
+        [spec pool]-[hidden]l->[submenu generator]
+
+        [submenu generator]
+
+        [version generator] <-d- [submenu generator]
+        [submenu spec] <-d- [submenu generator]
+
+        [submenu generator] -[hidden]d-> [backup spec]
+
+        [shell pool] -l-> [backup spec]
+        [shell pool]-[hidden]l->[submenu generator]
+
+    }
+
+    package "initrd" {
+        [initrd generator] --> [backup spec]
+
+    }
+  @enduml
+\end{plantuml}
+\end{adjustbox}
+
+  图 2-2 套件程序结构
+\end{center}
+
+deepin-boot-kit 主要由 submenu 与 initrd 组成。
+
+\paragraph{submenu}
+submenu 为系统的引导子菜单，由 submenu generator 遵循 submenu spec 进行生成。
+\paragraph{initrd}
+initrd 为系统在init阶段实际运行的系统，其生成会读取 backup spec。
+
+\subsubsection{版本名称设计}
+deepin 更新程序的自身版本号由引导套件工具进行生成，更新程序按照固定接口进行增量获取，设计如下:
+\begin{center}
+  \begin{adjustbox}{scale=0.75}
+    \begin{plantuml}
+      @startuml
+      package "version" {
+      [version generator] --> [version spec]
+     }
+    sort -- [version generator]
+    new -- [version generator]
+    @enduml
+  \end{plantuml}
+\end{adjustbox}
+
+图 2-3 版本名称
+\end{center}
+
+\begin{itemize}[leftmargin=4em]
+  \item sort: 版本排序，按提交位次进行顺序排列;
+  \item new: 版本生成，按照指定规则生成版本号;
+  \item version spec: 版本生成规则;
+  \item version generator: 版本生成;
+\end{itemize}
+
 
 \subsubsection{目录组织设计}
 
-deepin 更新程序对系统文件的组成进行了重新设计，系统文件由快照， \texttt{/vendor} ，\texttt{/persistent}组合组成，结构如下: 
+deepin 更新程序对系统文件的组成进行了重新设计，系统文件由快照， \texttt{/vendor} ，\texttt{/persistent}组合组成，结构如下:
 \begin{center}
   \begin{adjustbox}{scale=0.75}
     \begin{plantuml}
@@ -172,42 +286,45 @@ deepin 更新程序对系统文件的组成进行了重新设计，系统文件�
       [version1] -[hidden]r-> [version2]
       [version2] -[hidden]r-> [versionX]
     }
-    
+
     [Repo] -u-> [version1]
     [Repo] -u-> [version2]
     [Repo] -u-> [versionX]
-    
+
     [ActiveVersion] ..> [versionX]
     [ActiveVersion] -[hidden]r-> [/vendor]
     [OS] <-d- [/persistent]
     [OS] <-d- [/vendor]
     [OS] <-d- [ActiveVersion]
-    
+
     note right of [Repo]
     位于 /persistent/osroot/repo
     end note
     note bottom of Snapshot
     位于 /persistent/osroot/snapshot
     end note
-    note right of [/vendor]
-    第三方厂商软件安装的目录
-    end note
-    note right of [/persistent]
-    数据分区
-    end note
     @enduml
     \end{plantuml}
   \end{adjustbox}
 
-  图 2-2 OS 组成
+  图 2-4 OS 组成
 \end{center}
+
+\begin{itemize}[leftmargin=4em]
+  \item OS: 当前操作系统;
+  \item ActiveVersion: 当前系统正在使用的仓库版本;
+  \item /vendor: 第三方厂商软件安装的目录;
+  \item /persistent: 系统数据分区;
+  \item Repo: 更新程序的仓库，存放所有版本提交的文件;
+  \item Snapshot: 仓库检出的指定版本快照，为仓库的硬链接;
+\end{itemize}
 
 \subsubsection{repo 设计}
 repo 是 deepin 更新程序中最核心的对象，repo 采用了面向接口的设计方法，定义了 repo 必需的接口，并由具体的 repo 管理技术实现。
 
 repo 理论上需要支持 ostree、btrfs、zfs 三种技术，现阶段只支持ostree。
 
-repo 的组成结构如下: 
+repo 的组成结构如下:
 \begin{center}
   \begin{adjustbox}{scale=0.55}
     \begin{plantuml}
@@ -228,7 +345,7 @@ repo 的组成结构如下:
     \end{plantuml}
   \end{adjustbox}
 
-  图 2-3 repo 结构
+  图 2-5 repo 结构
 \end{center}
 
 \subsection{关键流程设计}
@@ -239,33 +356,43 @@ repo 的组成结构如下:
     \begin{plantuml}
       @startuml
       actor User
-      User -> Upgrade : 执行升级
-      Upgrade -> Upgrade : 安装 AtomicManager
-      Upgrade -> AtomicManager : 调用接口初始化配置文件,并获取最大分区大小
-      alt 空间不足
-      AtomicManager --> Upgrade : 最大分区不足存放仓库
+      User -> 升级工具 : 执行升级
+      升级工具 -> AtomicManager : 通过接口设置备份  V23 系统配置文件
+      升级工具 -> AtomicManager : 开始备份 V23 系统
+      alt 备份失败
+      AtomicManager --> 升级工具 : 最大分区不足存放仓库
       end
-      alt 空间不足
-      Upgrade --> User : 弹框空间不足仓库构建失败，是否继续升级
+      alt 备份失败
+      升级工具 --> User : 升级失败
       end
-      Upgrade -> AtomicManager : 调用接口初始化 repo 仓库
-      AtomicManager --> Upgrade : 初始化仓库结果
-      alt 初始化失败
-      Upgrade --> User : 仓库初始化失败，弹框是否继续升级
+      升级工具 -> AtomicManager : 通过接口设置备份  V20 系统配置文件
+      升级工具 -> AtomicManager : 开始备份 V20 系统
+      alt 备份失败
+      AtomicManager --> 升级工具 : 最大分区不足存放仓库
       end
-      Upgrade -> Upgrade : 执行升级
-      Upgrade --> User : 升级结果
+      alt 备份失败
+      升级工具 --> User : 升级失败
+      end
+      升级工具 -> AtomicManager : 回滚至刚备份的 V23 系统
+      alt 回滚失败
+      AtomicManager --> 升级工具 : 还原至原先系统
+      end
+      alt 回滚失败
+      升级工具 --> User : 升级失败
+      end
+      AtomicManager --> 升级工具 : 回滚成功
+      升级工具 -> AtomicManager : 通过接口还原默认备份配置文件
+      升级工具 --> User : 升级成功
       @enduml
-      \end{plantuml}
+    \end{plantuml}
     \end{adjustbox}
 
-    图 2-4 V20升级V23时序图
+    图 2-6 V20升级V23时序图
 \end{center}
 \begin{itemize}[leftmargin=4em]
-  \item AtomicManager 为原子更新程序,Upgrade 为系统更新程序，此图指 V20 升级 V23 的更新程序;
-  \item 升级程序需要先调用\texttt{sudo deepin-upgrade-manager --action=prepare}得到需要备份文件路径;
-  \item 在初始化配置文件时，需要判断当前最大分区大小，是否能够存放仓库，若空间不足则弹框给用户进行选择是否继续升级;
-  \item 在初始化 repo 仓库时，若初始化失败则会进行弹框备份失败，让用户进行选择是否继续升级;  
+  \item AtomicManager 为原子更新程序, 此图指 V20 升级 V23 的更新程序;
+  \item 升级工具利用原子更新的 setdefaultconfig 接口来调整配置文件信息，其具体细节查看章节 2.3.3.2;
+  \item 升级工具在升级过程中若失败则还原系统;
 \end{itemize}
 
 \subsubsection{V23 安装时初始化仓库}
@@ -275,24 +402,63 @@ repo 的组成结构如下:
       @startuml
       actor User
       User -> DeepinInstaller : 执行安装
-      DeepinInstaller -> DeepinInstaller : 释放文件
+      DeepinInstaller -> DeepinInstaller : 释放文件，oem文件安装
+      DeepinInstaller -> AtomicUpdate : 调用设置备份路径配置接口(全盘路径)
       DeepinInstaller -> AtomicUpdate : 调用接口初始化仓库
       AtomicUpdate --> DeepinInstaller : 返回仓库初始化结果
       alt 初始化失败
       DeepinInstaller --> User : 仓库初始化失败
       end
+      DeepinInstaller -> AtomicUpdate : 调用设置备份路径配置接口(默认配置)
+      DeepinInstaller -> DeepinInstaller : 设置用户账户密码
       DeepinInstaller --> User : 进入系统
       @enduml
       \end{plantuml}
     \end{adjustbox}
 
-    图 2-5 V23 安装器时序图
+    图 2-7 V23 安装器时序图
 \end{center}
 \begin{itemize}[leftmargin=4em]
   \item AtomicManager 为原子更新程序,DeepinInstaller 为系统安装器;
-  \item 在安装器将 oem 安装包安装完成后需要调用原子更新初始化仓库接口;
+  \item 在安装器将 oem 安装包安装完成后与设置用户账户密码前调用原子更新初始化仓库接口;
   \item 在安装器进行安装时，新增是否需要做初始化备份的选项;
   \item 当更新程序初始化仓库失败，不会影响到安装器主流程;
+  \item 默认配置指为原子更新自带 V23 配置文件，通过 \texttt{deepin-upgrade-manager --action=setdefaultconfig} 进行设置，其具体细节查看章节 2.3.3.2;
+\end{itemize}
+
+\subsubsection{设置提交回滚配置文件}
+\paragraph{触发场景}
+\begin{itemize}[leftmargin=4em]
+  \item V20升级V23时会首先设置配置文件，原子更新根据配置文件进行提交;
+  \item 安装器初始化备份时，设置配置文件，原子更新根据配置文件进行提交;
+\end{itemize}
+\paragraph{逻辑流程}
+setdefaultconfig 不同场景触发流程一致，其流程如下:
+\begin{center}
+  \begin{adjustbox}{scale=0.65}
+    \begin{plantuml}
+      @startuml
+      start
+      :传入配置路径设置原子更新配置文件;
+      if(路径是否存在)then(否)
+      :退出;
+      stop
+      else(是)
+      if(配置文件是否与当前一致)then(是)
+      :退出;
+      stop
+      else(否)
+      :对配置文件保存至指定目录;
+      stop
+      @enduml
+    \end{plantuml}
+  \end{adjustbox}
+
+    图 2-8 设置默认配置
+\end{center}
+\begin{itemize}[leftmargin=4em]
+  \item 当仓库不存在时，调用此接口将配置存放至本地目录 /var/lib/deepin-upgrade-manager/config/ready/，若仓库已存在则直接将其存放至仓库目录。
+  \item 此功能可以通过dbus接口或命令行 \texttt{deepin-upgrade-manager --action=setdefaultconfig --data=./data.yaml} 进行设置，命令行中不增加 \texttt{--data}参数时默认路径为 V23 的备份数据。
 \end{itemize}
 
 \subsubsection{repo 初始化}
@@ -310,15 +476,26 @@ init 不同场景触发流程一致，其流程如下:
       @startuml
       start
       :开始初始化;
-      if(配置文件是否存在)then(否)
-      :退出;
-      stop
-      else(是)
       if(repo 是否存在)then(是)
       :退出;
       stop
       else(否)
+      :获取当前系统最大分区;
+      :计算仓库需要空间大小;
+      if(最大分区是否能存放仓库)then(否)
+      :退出;
+      stop
+      else(是)
+      :将配置文件拷贝至仓库目录;
+      note right:/persistent/osroot/config/
+      :修改配置文件中仓库路径;
+      :在仓库目录新建本次提交的配置信息;
+      note right:/persistent/osroot/config/v23.0.0.2022/
       :version commit;
+      if(仓库路径是否在备份路径中)then(否)
+      else(是)
+      :仓库路径写入至配置文件过滤路径中;
+      endif
       :更新grub模块;
       :系统重启显示启动项;
       stop
@@ -326,9 +503,11 @@ init 不同场景触发流程一致，其流程如下:
     \end{plantuml}
   \end{adjustbox}
 
-  图 2-6 repo init
+  图 2-9 repo init
 \end{center}
-
+\begin{itemize}[leftmargin=4em]
+  \item 配置文件目录的优先级为 /var/lib/deeepin-upgrade-manager/config/ 大于 /etc/deeepin-upgrade-manager/;
+\end{itemize}
 
 \subsubsection{rootfs 数据准备}
 rootfs 文件夹为系统提交所需内容，其挂载至与 /usr 同级分区中;
@@ -353,7 +532,7 @@ rootfs 文件夹为系统提交所需内容，其挂载至与 /usr 同级分区�
       :删除rootfs文件夹;
       else(否);
       endif
-      
+
       :在/usr 同分区下新建rootfs文件夹;
       :遍历待备份目录文件;
       :rootfs 文件与待备份文件进行对比;
@@ -374,7 +553,7 @@ rootfs 文件夹为系统提交所需内容，其挂载至与 /usr 同级分区�
     \end{plantuml}
   \end{adjustbox}
 
-  图 2-7 rootfs 文件准备完成
+  图 2-10 rootfs 文件准备完成
 \end{center}
 
 \begin{itemize}[leftmargin=4em]
@@ -390,17 +569,21 @@ rootfs 文件夹为系统提交所需内容，其挂载至与 /usr 同级分区�
   \item 控制中心提供备份系统接口，手动点击时会触发此动作;
 \end{itemize}
 \paragraph{逻辑流程}
-commit 不同场景触发流程一致，其流程如下: 
+commit 不同场景触发流程一致，其流程如下:
 \begin{center}
   \begin{adjustbox}{scale=0.65}
     \begin{plantuml}
       @startuml
       start
       :开始提交;
+      :通过套件工具获取版本号;
+      :新建对应版本号的配置文件夹;
+      note right:/persistent/osroot/config/V23.0.0.2022/
+      :将 ready 目录下的配置文件拷贝至配置文件夹中;
+      :通过 ready 目录下配置文件生成 config.json;
       :解析config.json获取提交目录列表;
-      note left: 循环读取config.json,其中 subscribe-list 为需要提交目录
+      note right: 循环读取config.json,其中 subscribe-list 为需要提交目录
       :rootfs文件准备;
-      :生成版本号;
       :提交rootfs文件;
       :显示提交版本号;
       :更新grub;
@@ -410,11 +593,14 @@ commit 不同场景触发流程一致，其流程如下:
     \end{plantuml}
   \end{adjustbox}
 
-  图 2-8 repo commit
+  图 2-11 repo commit
 \end{center}
 
 \begin{itemize}[leftmargin=4em]
+  \item 本次 config.json (\texttt{/persistent/osroot/config/config.json}) 是由 ready目录下的配置生成(\texttt{/persistent/osroot/config/ready/data.yaml})。
   \item 读取 config.json 配置文件，内容为待备份文件路径，仓库版本，快照路径，临时存储文件路径;
+  \item 在提交前需要将之前准备的配置文件备份至与版本同名的配置文件夹下;
+  \item 在提交结束后，将原子更新的 defaultconfig 路径设置为本次提交版本下的配置文件路径;
 \end{itemize}
 \paragraph{错误处理}
 \begin{description}[leftmargin=!]
@@ -425,24 +611,40 @@ commit 不同场景触发流程一致，其流程如下:
 \paragraph{触发场景}
 \begin{itemize}[leftmargin=4em]
   \item 当用户在grub界面选择时会进行触发;
-  \item 当控制中心选择回滚时，会进行版本回滚;
+  \item 当备份还原选择回滚时，会进行版本回滚;
 \end{itemize}
 \paragraph{逻辑流程}
-rollback 不同场景触发流程一致，其流程如下: 
+rollback 不同场景触发流程一致，其流程如下:
 \begin{center}
   \begin{adjustbox}{scale=0.75}
     \begin{plantuml}
       @startuml
       start
       :开始回滚;
-      if(当前是否在initramfs中)then(是)
-      :获取当前挂载根系统的目录;
-      else(否)
+      if(当前是否在grub等待界面中)then(是)
+      if(当前 grub 是否存在加密) then (是)
+      :输入grub管理员账户密码;
+      else
       endif
+      :选择指定回滚版本;
+      else(否)
+      :设置回滚状态下次重启后回滚;
+      :重启;
+      if(当前 grub 是否存在加密) then (是)
+      :输入grub管理员账户密码;
+      else
+      endif
+      endif
+      :挂载仓库分区;
+      :获取当前挂载根系统的目录;
       if(确认本地挂载是否与仓库中/etc/fstab挂载点相同)then(不相同)
       :进行重新挂载;
       else(相同)
       endif
+      :根据版本号匹配回滚所需配置文件;
+      note left:/persistent/osroot/config/V23.0.0.2022/data.yaml
+      :生成本次回滚配置;
+      note left:/persistent/osroot/config/config.json
       :检出指定版本至<b>快照目录</b>;
       note left: 与 repo 同一分区
       :遍历待回滚目录;
@@ -461,23 +663,21 @@ rollback 不同场景触发流程一致，其流程如下:
       note right: 将<b>快照目录</b>文件拷贝至<b>恢复目录</b>
       endif
       :<b>恢复目录</b>替换待恢复目录;
-      note left: 跨分区时，需要将<b>恢复目录</b>文件移至父目录
-      :更新grub;
+      note left: 跨分区时，需要将<b>恢复目录</b>文件全量移至父目录，并将父目录文件删除
       :回滚完成;
       stop;
       @enduml
     \end{plantuml}
   \end{adjustbox}
 
-  图 2-9 repo version rollback
+  图 2-12 repo version rollback
 \end{center}
 
 \begin{itemize}[leftmargin=4em]
   \item 恢复目录: 系统所需的待回滚版本文件,快照目录:  与 repo 同分区目录，内容为仓库检出指定回滚版本硬链接;
-  \item 回滚首先会判断当前系统状态，是否在 initramfs 中，若在 initramfs 中就会识别 –rootfs 参数传入的根系统文件路径，再从新的根文件系统路径获取仓库位置;
-  \item 回滚时，在同一分区在不同目录下进行挂载: 通过临时文件改名直接将系统目录替换;
-  \item 回滚时，在同一分区只在一个目录下进行挂载: 在分区待恢复目录下子目录与父目录同一分区时，需要在恢复目录的同级目录下创建临时目录，当最后文件替换时直接将临时目录进行重命名。当子目录与父目录分区不一致时，需要在子目录下创建临时目录，当最后文件替换时再将临时目录文件进行移出子目录下;
-  \item 在数据替换完成之后，再将系统的 grub 进行更新，显示当前系统的 grub 引导;
+  \item 回滚首先会判断当前系统状态，是否在 grub 选择界面中，若在其中就会识别 grub 参数进行回滚动作，若不存在则设置回滚状态，重启后回滚;
+  \item 在创建恢复目录时，为了节省空间会选择与待恢复目录同一分区进行创建。
+  \item 回滚时会通过状态文件中分区 UUID，或 grub 参数中分区的 UUID ，来挂载仓库分区;
 \end{itemize}
 
 \paragraph{错误处理}
@@ -493,7 +693,7 @@ rollback 不同场景触发流程一致，其流程如下:
 \end{itemize}
 
 \paragraph{逻辑流程}
-clean 不同场景触发流程一致，其流程如下: 
+clean 不同场景触发流程一致，其流程如下:
 \begin{center}
   \begin{adjustbox}{scale=0.65}
     \begin{plantuml}
@@ -522,7 +722,7 @@ clean 不同场景触发流程一致，其流程如下:
     \end{plantuml}
   \end{adjustbox}
 
-  图 2-10 repo version clean
+  图 2-13 repo version clean
 \end{center}
 \begin{itemize}[leftmargin=4em]
   \item 版本清理时需要将 ostree 的 branch 中 commit 进行全部删除;
@@ -530,46 +730,138 @@ clean 不同场景触发流程一致，其流程如下:
   \item 生成待清理版本时不显示初始版本，防止无法还原初始系统;
 \end{itemize}
 
-\subsubsection{grub 更新}
+\subsubsection{版本号获取}
 \paragraph{触发场景}
 \begin{itemize}[leftmargin=4em]
-  \item 当系统进行版本提交时会触发,显示最新版本;
+  \item 当更新程序提交当前系统时调用套件工具进行版本获取;
+\end{itemize}
+
+\begin{center}
+  \begin{adjustbox}{scale=0.75}
+    \begin{plantuml}
+      @startuml
+      :传入 version 参数调用引导套件程序;
+      if (存储版本信息文件不存在) then (Y)
+      :创建存储版本文件;
+      :创建初始化版本号;
+      else(N)
+      :读取数据文件;
+      :进行增量计算;
+      endif
+      :版本信息写入本地存储文件;
+      :返回新增版本号;
+      stop
+      @enduml
+    \end{plantuml}
+  \end{adjustbox}
+
+  图 2-14 new version
+\end{center}
+\begin{itemize}[leftmargin=4em]
+  \item 获取版本号通过命令：deepin-boot-kit --action=version 进行增量获取;
+\end{itemize}
+
+\subsubsection{引导更新}
+\paragraph{触发场景}
+\begin{itemize}[leftmargin=4em]
+  \item 当系统进行版本提交时会触发，显示最新版本;
   \item 当系统进行版本清理会触发，已清理的版本不会进行显示;
   \item 当系统进行版本回滚时触发，显示回滚后的版本;
 \end{itemize}
-\paragraph{逻辑流程}
-update grub 不同场景触发流程一致，其流程如下: 
+
+\begin{center}
+  \begin{adjustbox}{scale=0.75}
+    \begin{plantuml}
+      @startuml
+      :传入 update 参数调用引导套件程序;
+      :更新本地grub;
+      note left:update-grub
+      :循环加载配置;
+      note left:在 /var/lib/deepin-upgrade-manager/config/目录
+      :通过配置获取grub生成必要信息;
+      :获取当前系统引导加密账户;
+      if (是否存在引导加密账户) then(是)
+      :引导增加参数进行加密设置;
+      else
+      endif
+      :grub文件写入;
+      stop
+      @enduml
+    \end{plantuml}
+  \end{adjustbox}
+
+  图 2-15 update grub
+\end{center}
+\begin{itemize}[leftmargin=4em]
+  \item 更新本地 grub 时，会触发脚本调用，使引导程序获取 grub 需要显示的信息;
+  \item grub 加密必须在控制中心设置 grub 管理员账户密码并对此功能进行开启才可以使用加密功能;
+  \item 通过 com.deepin.daemon.Grub2.EditAuthentication的dbus 接口获取当前系统引导加密账户;
+  \item 配置详情见关键数据设计;
+\end{itemize}
+
+\subsubsection{initrd 更新}
+\paragraph{触发场景}
+\begin{itemize}[leftmargin=4em]
+  \item 修改initramfs下的脚本会自动出发initrd更新;
+\end{itemize}
+
+\begin{center}
+  \begin{adjustbox}{scale=0.75}
+    \begin{plantuml}
+      @startuml
+      :本地 initramfs 被更新;
+      :调用 initrd 生成脚本;
+      :调用套件工具;
+      :循环加载配置信息;
+      note left:在 /var/lib/deepin-upgrade-manager/config/目录
+      :通过配置获取initrd生成必要信息;
+      :initrd生成;
+      stop
+      @enduml
+    \end{plantuml}
+  \end{adjustbox}
+
+  图 2-16 update initrd
+\end{center}
+\begin{itemize}[leftmargin=4em]
+  \item 在 update-initramfs 出发自身的 hook 脚本，从而调用套件工具;
+  \item 必要信息包含工具中运行二进制的脚本路径，在initrd生成时将其进行拷贝;
+  \item 配置详情见关键数据设计;
+\end{itemize}
+
+\subsubsection{initrd 调用二进制}
 \begin{center}
   \begin{adjustbox}{scale=0.65}
     \begin{plantuml}
       @startuml
-      :开始更新引导项;
-      :设置环境变量;
-      note right: 限制grub显示版本数量
-      :获取当前已备份版本;
-      if(当前/boot中内核与已备份内核是否相同)then(是)
-      :硬链接本机内核至/boot/snapshot 文件夹下;
-      note left:cp -l ”/boot/*” ”/boot/snapshot”
-      else(否)
-      :将已备份版本内核文件拷贝至/boot下;
-      note right:cp ”/persistent/osroot/snapshot/V23.*/boot/*” ”/boot/snapshot”
+      :用户在grub选择指定版本;
+      if(当前 grub 是否存在加密) then (是)
+      :输入grub管理员账户密码;
+      else
       endif
-      :设置init启动参数;
-      :写入grub.cfg配置文件中;
-      note right: /boot/grub/grub.cfg
+      :进入系统initrd;
+      note left:init-bottom阶段
+      :读取内核参数;
+      :将回滚版本号设置为环境变量;
+      note left:export ROLLBACK_VERSION=
+      :获取指定工具脚本的路径;
+      :遍历指定路径下的脚本进行排序;
+      :运行排序后的脚本;
       stop
-      @enduml      
+      @enduml
     \end{plantuml}
   \end{adjustbox}
 
-  图 2-11 update grub
+  图 2-17 initrd runing tool
 \end{center}
-\begin{itemize}[leftmargin=4em]
-  \item 引导项显示回滚最大个数可以通过环境变量进行设置;
-  \item 回滚时是将脚本放入 \texttt{grub中}再利用 \texttt{update-grub}命令进行更新;
-  \item 当内核拷贝时，若系统内核与已备份内核 hash 相同则直接将系统内核硬链接，从而节约空间;
-\end{itemize}
 
+
+\begin{itemize}[leftmargin=4em]
+  \item 在 initrd 中的脚本调用通过传入的内核参数的 back\_scheme 来确认需要运行的脚本文件夹，文件夹中包含工具回滚的所有操作，由工具进行定义;
+  \item 排序为数字排序，数字越小优先级越高;
+  \item 工具脚本文件夹中存放回滚的具体流程;
+  \item 工具脚本通过内核参数cmdline中的 back\_version 或 deepin-boot-kit设置 ROLLBACK\_VERSION 环境变量来获取具体回滚版本;
+\end{itemize}
 
 \subsection{数据结构设计}
 \subsubsection{版本号}
@@ -580,7 +872,7 @@ update grub 不同场景触发流程一致，其流程如下:
 \texttt{minor} 则是在 \texttt{date} 不变时自增， \texttt{major} 则保持不变；
 \texttt{date} 是当前的时间，由 \texttt{YearMonthDay}组成，如 \texttt{20220222} 。
 
-这里用下面的例子说明版本号的变更方式: 
+这里用下面的例子说明版本号的变更方式:
 
 \begin{quote}
 假设 \texttt{distribution} 为 \texttt{V23} ，\texttt{date} 为 \texttt{20220222} 。
@@ -600,7 +892,7 @@ Example 2 : 假设 distribution 为 V23，在 2022 年 4 月 1 日安装好系�
 V23.0.0.20220401 和 V23.1.0.20220405 此刻可以比较 major 大小。
 \end{quote}
 \subsubsection{Repo}
-Repo 中定义了仓库管理的接口，OSTree 进行实现，数据结构如下: 
+Repo 中定义了仓库管理的接口，OSTree 进行实现，数据结构如下:
 \begin{center}
   \begin{adjustbox}{scale=0.75}
     \begin{plantuml}
@@ -625,7 +917,7 @@ Repo 中定义了仓库管理的接口，OSTree 进行实现，数据结构如�
     \end{plantuml}
   \end{adjustbox}
 
-  图 2-12 repo object
+  图 2-18 repo object
 \end{center}
 \begin{itemize}[leftmargin=4em]
   \item Init : 初始化仓库，并进行一次全量提交;
@@ -633,47 +925,47 @@ Repo 中定义了仓库管理的接口，OSTree 进行实现，数据结构如�
   \begin{itemize}[leftmargin=4em]
     \item version : 字符串类型，传入需判断版本号;
     \item return : bool 表示此版本是否存在，若存在则为 true ，不存在则为 false;
-  \end{itemize}  
+  \end{itemize}
   \item Last : 获取最后一次提交时版本;
   \begin{itemize}[leftmargin=4em]
     \item return : 字符串类型，返回最后一次提交版本;
-  \end{itemize} 
+  \end{itemize}
   \item List: 获取当前仓库所有版本号;
   \begin{itemize}[leftmargin=4em]
     \item return : 字符串数组类型，返回的当前仓库版本号列表;
-  \end{itemize} 
+  \end{itemize}
   \item Snapshot: 获取指定版本快照;
   \begin{itemize}[leftmargin=4em]
     \item version : 字符串类型，指定版本号;
     \item snapDir : 字符串类型，获取快照时，存放本地路径;
-  \end{itemize} 
+  \end{itemize}
   \item Commit: 提交文件至仓库;
   \begin{itemize}[leftmargin=4em]
     \item version : 字符串类型，指定版本号;
     \item subject : 字符串类型，此次提交的主题;
     \item dataDir : 此次提交文件路径;
-  \end{itemize}   
+  \end{itemize}
   \item Diff: 比较两次提交，并输出不同;
   \begin{itemize}[leftmargin=4em]
     \item baseVersion : 字符串类型，待比较版本号;
     \item targetVersion : 字符串类型，需比较版本号;
     \item dstFile : 字符串类型，两版本中不同内容;
-  \end{itemize} 
+  \end{itemize}
   \item Cat: 获取指定版本，指定内容;
   \begin{itemize}[leftmargin=4em]
     \item version : 字符串类型，指定版本号;
-    \item ilepath : 字符串类型，指定版本文件中文件路径;
+    \item filepath : 字符串类型，指定版本文件中文件路径;
     \item dstFile : 字符串类型，获取指定分支指定文件内容;
-  \end{itemize} 
+  \end{itemize}
   \item Previous: 获取指定版本上一个版本号;
   \begin{itemize}[leftmargin=4em]
     \item version : 字符串类型，指定版本号;
     \item return : 字符串类型，返回上一个版本号;
-  \end{itemize} 
+  \end{itemize}
 \end{itemize}
 
 \subsubsection{DBus}
-DBus 中定义了外部调用的接口。 
+DBus 中定义了外部调用的接口。
 \begin{itemize}[leftmargin=4em]
   \item service name：org.deepin.AtomicUpgrade1
   \item object path：/org/deepin/AtomicUpgrade1
@@ -687,39 +979,174 @@ DBus 中定义了外部调用的接口。
   \item Delete (IN String  version): 删除仓库指定版本，当前激活版本与初始版本无法删除;
   \item ListVersion (OUT Array<String> list): 获取当前仓库的版本列表;
   \item QuerySubject (IN Array<String> versions)(OUT Array<String> list): 获取指定版本列表对应主题信息;
-\end{itemize} 
+  \item SetDefaultConfig (IN String  path): 设置原子更新提交与回滚的默认配置文件;
+  \item GetGrubTitle (IN String  version, OUT String  grubtitle):获取指定版本的引导展示信息;
+  \item CancelRollback(): 取消系统回滚状态，异步调用，立即返回，若已存在提交，删除，回滚或重置操作则返回dbus错误;
+\end{itemize}
 
 \paragraph{Properties}
 \begin{itemize}[leftmargin=4em]
   \item ActiveVersion: 当前系统中正在使用仓库的系统版本;
+  \item DefaultConfig: 当前系统中下次提交时配置文件路径;
+  \item Running: 当前程序是否在运行;
+  \item RepoUUID: 当前仓库存储分区的UUID;
 \end{itemize}
 
-\paragraph{Signals}
+
 \begin{itemize}[leftmargin=4em]
   \item StateChanged (Int32 operate, Int32 state, String version,String message): 当前程序改变状态信号通知;
 \end{itemize}
 
-\subsubsection{config.json}
-config.json结构中包含生成，提交，回滚操作所需要的基本数据，数据格式为json，存放路径为\texttt{/persistent/osroot/config.json}。
+\subsubsection{原子更新 data.yaml}
+data.yaml 为原子更新生成回滚与提交的数据的配置文件(config.json)，数据格式为yaml,默认使用v23的配置，其存放路径为\texttt{/persistent/osroot/config/config/v23.0.0.20220302/data.yaml},原子更新默认自带 V23 配置其路径为 \texttt{/etc/deepin-upgrade-manager/ready/data.yaml}。
+\paragraph{示例}
+\begin{lstlisting}
+  target:
+    backup_list:
+        - "/boot"
+        - "/usr"
+        - "/var"
+        - "/etc/pam.d"
+        - "/etc/os-version"
+        - "/etc/os-release"
+        - "/etc/apt/sources.list"
+    hold_list:
+        - "/opt"
+        - "/etc"
+        - "/usr/lib/dpkg-db"
+        - "/var/spool"
+        - "/var/lib/lightdm"
+\end{lstlisting}
 
+\paragraph{说明}
 \begin{itemize}[leftmargin=4em]
-  \item version: 当前原子更新版本;
-  \item distribution: 当前系统发行版本;
+  \item backup\_list: 需要备份文件路径;
+  \item hold\_list: 需要备份与提交时需要保留原系统的文件路径;
+\end{itemize}
+
+\subsubsection{原子更新 config.json}
+config.json 为原子更新的配置文件，其结构中包含生成，提交，回滚操作所需要的基本数据，数据格式为json，存放路径为\texttt{/etc/deepin-upgrade-manager/config.json},在仓库初始化后会使用仓库下的config.json，其路径为\texttt{/persistent/osroot/config/config.json}。
+
+\paragraph{示例}
+\begin{lstlisting}
+  {
+    "config_version": "1.0.10",
+    "distribution": "v23",
+    "active_version": "20220210",
+    "cache_dir": "/usr/.osrepo-cache",
+    "auto_cleanup": true,
+    "max_repo_retention": 3,
+    "max_version_retention": 5,
+    "repo_list": [
+      {
+        "repo_mount_point":"/persistent",
+        "repo": "/persistent/osroot/repo",
+        "config_dir": "/persistent/osroot/config",
+        "stage_dir": "/persistent/osroot/cache",
+        "snapshot_dir": "/persistent/osroot/snapshot",
+        "data_origin":"/etc/deepin-upgrade-manager/ready/data.yaml",
+        "subscribe_list": [
+          "/boot",
+          "/usr",
+          "/etc",
+          "/var/lib/apt",
+          "/var/lib/dkms",
+          "/var/lib/dpkg",
+          "/var/lib/man-db",
+          "/var/lib/initramfs-tools",
+          "/var/lib/systemd/deb-systemd-helper-enabled",
+          "/var/lib/selinux"
+        ],
+        "filter_list": [
+          "/usr/lib/locale/locale-archive",
+          "/etc/locale.gen",
+          "/usr/share/deepin-defender/localcache.db"
+        ]
+      }
+    ]
+  }
+\end{lstlisting}
+
+\paragraph{说明}
+\begin{itemize}[leftmargin=4em]
+  \item config\_version: 当前原子更新版本;
+  \item distribution: 配置文件使用版本;
   \item cache\_dir: 当前释放系统文件缓存地址，一般会挂载至根分区;
   \item active\_version: 当前系统使用仓库文件的激活版本;
   \item max\_repo\_retention: 最大保存版本数量;
   \item repo\_list: 数组存储 repo 内部信息;
     \begin{itemize}[leftmargin=4em]
+    \item repo\_mount\_point: 当前仓库存在分区;
     \item repo: repo仓库路径;
+    \item config\_dir: 每个版本对应的配置文件所存放路径;
     \item snapshot\_dir: 快照存放路径;
+    \item data\_origin: 备份路径与过滤路径的信息来源文件路径;
     \item subscribe\_list: 需要备份文件路径;
+    \item filter\_list: 需要备份与提交时需要过滤的文件路径;
+    \end{itemize}
+\end{itemize}
+
+\subsubsection{引导套件 config.json}
+config.json 结构中包含引导工具需要生成initrd与grub的信息，数据格式为 json，文件由提交工具进行提供，格式由引导套件进行规定，其存放路径为/var/lib/deepin-boot-kit/config/，其文件命名应遵循<scheme>.json规则。
+
+\paragraph{示例}
+\begin{lstlisting}
+  {
+    "submenu":{
+        "version_list": "deepin-upgrade-manager --action=bootlist"
+      }
+    "initrd":{
+        "script_path": "/var/lib/deepin-upgrade-manager/script/"
+      }
+  }
+\end{lstlisting}
+
+\paragraph{说明}
+\begin{itemize}[leftmargin=4em]
+  \item submenu: grub 生成信息;
+    \begin{itemize}[leftmargin=4em]
+    \item version\_list: 获取 Version List 的具体命令;
+    \end{itemize}
+  \item initrd: initrd 生成信息;
+    \begin{itemize}[leftmargin=4em]
+    \item script\_path: 回滚工具存放脚本路径;
+    \end{itemize}
+\end{itemize}
+
+\subsubsection{引导套件 Version List}
+Version List 为指定工具提供的版本信息列表，由还原工具指定获取列表方法，由套件工具决定获取内容格式及必要字段;
+
+\paragraph{示例}
+\begin{lstlisting}
+  {
+    "version_list":[
+      {
+        "version": "v20.0.0.20220323",
+        "kernel": "/boot/snapshot/v20.0.0.20220323/vmlinuz",
+        "initrd": "/boot/snapshot/v20.0.0.20220323/initrd.img",
+        "scheme": "atomic",
+        "display": "deepin 23.1(2022/06/27 10:00:00)"
+      }
+    ]
+  }
+\end{lstlisting}
+
+\paragraph{说明}
+\begin{itemize}[leftmargin=4em]
+  \item version\_list: 数组存储 version 内部信息;
+    \begin{itemize}[leftmargin=4em]
+    \item version: 版本名称;
+    \item kernel: 当前版本内核存放路径，必须为系统启动挂载/boot后的文件路径;
+    \item initrd: 当前版本initrd存放路径，必须为系统启动挂载/boot后的文件路径;
+    \item scheme: 当前工具的类型，用于区分不同工具;
+    \item display: grub 显示信息;
     \end{itemize}
 \end{itemize}
 
 \section{非功能性设计}
 \subsection{性能}
 \subsubsection{性能测试}
-本次测试内容为初始化 repo ，二次提交三次提交仓库，在 HDD 和 SSD 下，在跨分区（跨分区: 将/boot，/var，/ur/local挂载至其他分区）和非跨分区的不同情况下表现，其测试结果如下:
+本次测试内容为初始化 repo ，二次提交三次提交仓库，在 HDD 和 SSD 下，在跨分区（跨分区: 将/boot，/var，/usr/local挂载至其他分区）和非跨分区的不同情况下表现，其测试结果如下:
 \begin{table}[H]
   \begin{tabular}{|c|ccc|}
   \hline
@@ -772,7 +1199,7 @@ config.json结构中包含生成，提交，回滚操作所需要的基本数据
   无repo   & \multicolumn{1}{c|}{65}         & 86         \\ \hline
   \end{tabular}
   \end{table}
-  
+
 \subsubsection{性能分析}
 \begin{itemize}[leftmargin=4em]
 \item 4 核/SSD（增加 1 分半左右，时间增长 70\% 左右），4 核心/HDD（增加 5 分钟+，时间增长 55\% 左右）;
@@ -861,5 +1288,20 @@ deepin 更新程序在数据安全,权限安全进行设计:
     在 V23 的 ISO 镜像中，需要把原子更新模块期望的系统目录进行集成，其在本文的 2.2.4 和 2.3.1 有详细说明;
 \subsection{安装器初始化}
     在 安装器对 ISO 安装时，需要对已在ISO集成的期望目录进行循环解压，其在本文 2.3.3 有详细交互图说明;
+
+\section{变更记录}
+\subsection{V1.6}
+  \subsubsection{详细信息}
+  \begin{itemize}[leftmargin=4em]
+    \item 修改章节 2.3.1 , 根据升级工具，补充v20升级v23逻辑;
+    \item 修改章节 2.3.2 , 优化安装器与原子更新交互逻辑;
+    \item 修改章节 2.3.3 , 增加设置默认配置(SetDefaultConfig)的逻辑流程图;
+    \item 修改章节 2.3.4 , 修改仓库初始化逻辑，增加对配置文件的处理;
+    \item 修改章节 2.3.6 , 增加提交时对配置文件备份处理;
+    \item 修改章节 2.3.7 , 修改回滚逻辑，增加对配置文件的处理;
+    \item 修改章节 2.4.3 , 增加dbus的 SetDefaultConfig 接口与 DefaultConfig, RepoUUID 属性;
+    \item 修改章节 2.4.4 , 增加原子更新data.yaml 配置文件设计;
+    \item 修改章节 2.4.6 , 将配置文件 config.json 路径修改为仓库路径，并增加存放对应版本配置的文件路径机制;
+    \end{itemize}
 
 \end{document}

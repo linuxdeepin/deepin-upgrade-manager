@@ -1,3 +1,9 @@
+deepin-upgrade-manager (1.0.12) unstable; urgency=medium
+
+  * Increase the profile design documents
+
+ -- Chenghao Liu <liuchenghao@uniontech.com>  Tue, 1 Nov 2022 17:22:03 +0800
+
 deepin-upgrade-manager (1.0.11) unstable; urgency=medium
 
   * Adding custom backup filtration field interface
@@ -45,7 +51,7 @@ deepin-upgrade-manager (1.0.5) unstable; urgency=medium
 
 deepin-upgrade-manager (1.0.4) unstable; urgency=medium
 
-  * Fix auto cleanup and integrated to v23
+  * Fix auto cleanup
  -- Chenghao Liu <liuchenghao@uniontech.com>  Thu, 16 Jun 2022 9:24:03 +0800
 
 deepin-upgrade-manager (1.0.3) unstable; urgency=medium
