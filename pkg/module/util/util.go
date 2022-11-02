@@ -648,7 +648,6 @@ func CompareDirAndCopy(src, dst, cmp string, filter []string) error {
 }
 
 func CopyDir(src, dst string, filterDirs, filterFiles []string, enableHardlink bool) error {
-
 	if len(filterDirs) != 0 && IsExistsPath(filterDirs, src) {
 		logger.Debugf("ignore dir path:%s", src)
 		return nil
@@ -656,6 +655,7 @@ func CopyDir(src, dst string, filterDirs, filterFiles []string, enableHardlink b
 
 	sfi, err := os.Stat(src)
 	if err != nil {
+		logger.Errorf("failed stat file %v", err)
 		return err
 	}
 
@@ -759,6 +759,7 @@ func IsFileSame(file1, file2 string) (bool, error) {
 func IsFileSameByInode(file1, file2 string) (bool, error) {
 	fi1, err := os.Lstat(file1)
 	if err != nil {
+		logger.Errorf("failed Lstat file %v", err)
 		return false, err
 	}
 	fi2, err := os.Lstat(file2)

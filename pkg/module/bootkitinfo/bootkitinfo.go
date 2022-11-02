@@ -3,8 +3,10 @@ package bootkitinfo
 import (
 	"deepin-upgrade-manager/pkg/module/dirinfo"
 	"deepin-upgrade-manager/pkg/module/generator"
+	"deepin-upgrade-manager/pkg/module/repo/branch"
 	"deepin-upgrade-manager/pkg/module/util"
 	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"path/filepath"
 	"sort"
@@ -51,11 +53,11 @@ func (infolist BootInfoList) Sort() BootInfoList {
 
 func NewVersion() (string, error) {
 	action := string("--action=") + "version"
-	out, err := util.ExecCommandWithOut(DEEPIN_BOOT_KIT, []string{action})
-	if err != nil {
-		return "", err
-	}
+	out, _ := util.ExecCommandWithOut(DEEPIN_BOOT_KIT, []string{action})
 	version := strings.TrimSpace(string(out))
+	if !branch.IsValid(version) {
+		return "", errors.New("failed from boot kit get version")
+	}
 	return version, nil
 }
 

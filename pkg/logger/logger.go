@@ -44,7 +44,6 @@ func NewLogger(name string, isInitramfs bool) {
 		var writer io.Writer
 		syslogger, err := syslog.New(syslog.LOG_DAEMON, name)
 		if err != nil {
-			stdLog.Printf("failed to open log file: %v", err)
 			writer = io.MultiWriter(os.Stderr)
 		} else {
 			writer = io.MultiWriter(os.Stderr, syslogger)
