@@ -22,6 +22,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -367,7 +368,7 @@ func (c *Upgrader) EnableBoot(version string) (stateType, error) {
 }
 
 func (c Upgrader) GrubTitle(version string) string {
-	var commitName string
+	var commitName, commitTime string
 
 	systemName, err := util.GetOSInfo("SystemName")
 	if err != nil {
@@ -379,12 +380,29 @@ func (c Upgrader) GrubTitle(version string) string {
 	}
 	handler, _ := repo.NewRepo(repo.REPO_TY_OSTREE,
 		filepath.Join(c.rootMP, c.conf.RepoList[0].Repo))
-	time, err := handler.CommitTime(version)
-	if err != nil {
+	content, err := handler.Subject(version)
+	if err == nil {
+		sub, err := config.LoadSubject(content)
+		if err == nil && len(sub.Time()) > 0 {
+			t, err := strconv.ParseInt(sub.Time(), 10, 64)
+			if err == nil {
+				timeTemplate1 := "2006/01/02 15:04:05" //常规类型
+				commitTime = time.Unix(t, 0).Format(timeTemplate1)
+			}
+
+		}
+	}
+	if len(commitTime) == 0 {
+		time, err := handler.CommitTime(version)
+		if err == nil {
+			commitTime = strings.Replace(time, "-", "/", -1)
+		}
+	}
+	if len(commitTime) == 0 {
 		commitName = fmt.Sprintf("Rollback to %s", version)
 		logger.Warning("failed get commit time, err:", err)
 	} else {
-		commitName = systemName + " " + MinorVersion + " " + "(" + strings.Replace(time, "-", "/", -1) + ")"
+		commitName = systemName + " " + MinorVersion + " " + "(" + commitTime + ")"
 	}
 	return commitName
 }
