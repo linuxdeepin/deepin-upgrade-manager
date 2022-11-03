@@ -11,6 +11,7 @@ import (
 	"deepin-upgrade-manager/pkg/module/mountinfo"
 	"deepin-upgrade-manager/pkg/module/mountpoint"
 	"deepin-upgrade-manager/pkg/module/notify"
+	"deepin-upgrade-manager/pkg/module/plymouth"
 	"deepin-upgrade-manager/pkg/module/records"
 	"deepin-upgrade-manager/pkg/module/repo"
 	"deepin-upgrade-manager/pkg/module/repo/branch"
@@ -80,6 +81,16 @@ const (
 	_STATE_TY_FAILED_VERSION_DELETE
 	_STATE_TY_FAILED_NO_VERSION
 	_STATE_TY_RUNING stateType = 1
+)
+
+type (
+	progressTheme int32
+)
+
+const (
+	_NO_THEME progressTheme = iota
+	_UPGRADE_TOOL
+	_BOOT_KIT
 )
 
 func (state stateType) String() string {
@@ -386,7 +397,7 @@ func (c Upgrader) GrubTitle(version string) string {
 		if err == nil && len(sub.Time()) > 0 {
 			t, err := strconv.ParseInt(sub.Time(), 10, 64)
 			if err == nil {
-				timeTemplate1 := "2006/01/02 15:04:05" //常规类型
+				timeTemplate1 := "2006/01/02 15:04:05"
 				commitTime = time.Unix(t, 0).Format(timeTemplate1)
 			}
 
@@ -418,8 +429,14 @@ func (c *Upgrader) EnableBootList() (string, int, error) {
 		os.RemoveAll(bootSnapDir)
 	}
 	var showList []string
+	osVersion, err := util.GetOSInfo("MajorVersion")
+	if nil != err {
+		osVersion = "23"
+	}
+	osVersion = "v" + osVersion
 	for _, v := range list {
-		if generator.Less(v, c.conf.ActiveVersion) {
+		head := strings.Split(v, ".")[0]
+		if head == osVersion && generator.Less(v, c.conf.ActiveVersion) {
 			continue
 		}
 		c.EnableBoot(v)
@@ -507,6 +524,7 @@ func (c *Upgrader) Rollback(version string,
 	c.SendingSignal(evHandler, _OP_TY_ROLLBACK_PREPARING_START, _STATE_TY_RUNING, version, "")
 	c.LoadRollbackRecords(true)
 	c.SendingSignal(evHandler, _OP_TY_ROLLBACK_PREPARING_SET_CONFIG, _STATE_TY_RUNING, version, "")
+	c.UpdataProgress(0)
 	backVersion, isCanRollback, err := c.getRollbackInfo(version, c.rootMP)
 	if err != nil {
 		exitCode = _STATE_TY_FAILED_NO_REPO
@@ -522,6 +540,7 @@ func (c *Upgrader) Rollback(version string,
 			exitCode = _STATE_TY_FAILED_OSTREE_ROLLBACK
 			goto failure
 		}
+		c.UpdataProgress(20)
 		// need load rollback version config
 		err := c.conf.LoadVersionData(backVersion, c.rootMP)
 		if err != nil {
@@ -538,7 +557,7 @@ func (c *Upgrader) Rollback(version string,
 			}
 			goto failure
 		}
-
+		c.UpdataProgress(30)
 		// rollback system files
 		for _, v := range c.conf.RepoList {
 			err = c.repoRollback(v, backVersion)
@@ -575,7 +594,14 @@ func (c *Upgrader) Rollback(version string,
 			grubManager := grub.Init()
 			err := grubManager.SetTimeout(0)
 			if err != nil {
-				logger.Warningf("failed set the rollback waiting time, err:%v", err)
+				grubManager = grubManager.ChangeDbusDest()
+				err := grubManager.SetTimeout(0)
+				if err != nil {
+					logger.Warningf("failed set the rollback waiting time, err:%v", err)
+				} else {
+					time.Sleep(1 * time.Second) // wait for grub set out time
+					grubManager.Join()
+				}
 			} else {
 				time.Sleep(1 * time.Second) // wait for grub set out time
 				grubManager.Join()
@@ -584,7 +610,7 @@ func (c *Upgrader) Rollback(version string,
 		logger.Info("start set rollback a old version:", backVersion)
 	}
 	c.SendingSignal(evHandler, _OP_TY_ROLLBACK_PREPARING_END, _STATE_TY_SUCCESS, version, "")
-
+	c.UpdataProgress(100)
 	logger.Info("successed run rollback action")
 	return int(exitCode), nil
 failure:
@@ -593,6 +619,7 @@ failure:
 		util.CopyFile(filepath.Join(c.rootMP, LocalNotifyDesktopPath), filepath.Join(c.rootMP, AutoStartDesktopPath), false)
 	}
 	c.SendingSignal(evHandler, _OP_TY_ROLLBACK_PREPARING_END, exitCode, version, err.Error())
+	c.UpdataProgress(100)
 	return int(exitCode), err
 }
 
@@ -823,6 +850,7 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 	logger.Debugf("will recovery dirs %v, files %v", realDirSubscribeList, realFileSubcribeList)
 	var err error
 	defer func() {
+		c.UpdataProgress(70)
 		// if failed update, restoring the system
 		if err != nil || c.recordsInfo.IsRestore() {
 			c.recordsInfo.SetRestore()
@@ -875,7 +903,7 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 			}
 		}
 	}
-
+	c.UpdataProgress(40)
 	// hardlink need to filter file or dir to prepare dir
 	for _, dir := range rollbackDirList {
 		dirRoot := filepath.Dir(dir)
@@ -914,7 +942,7 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 	}
 	var bootDir string
 	// repo files replace system files
-
+	c.UpdataProgress(60)
 	for _, dir := range realDirSubscribeList {
 		logger.Debug("start replacing the dir:", dir)
 		if strings.HasSuffix(filepath.Join(c.rootMP, "/boot"), dir) {
@@ -948,7 +976,6 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 			}
 		}
 	}
-
 	return nil
 }
 
@@ -979,12 +1006,9 @@ func (c *Upgrader) copyRepoData(rootDir, dataDir string,
 			}
 		} else {
 			logger.Info("[copyRepoData] src file:", srcDir)
-			real, err := filepath.EvalSymlinks(srcDir)
+			err := util.CopyFile2(srcDir, filepath.Join(dataDir, dir), fi, true)
 			if err != nil {
-				continue
-			}
-			if !util.IsRootSame(subscribeList, real) || real == srcDir {
-				util.CopyFile2(real, filepath.Join(dataDir, dir), fi, true)
+				return err
 			}
 		}
 
@@ -1295,6 +1319,34 @@ func (c *Upgrader) ResetGrub(envVars []string) {
 	}
 }
 
+func (c *Upgrader) UpdataProgress(progress int) {
+	upgrade_tool_theme := "/usr/share/plymouth/themes/deepin-upgrade"
+	var theme progressTheme
+	if util.IsExists(upgrade_tool_theme) {
+		theme = _UPGRADE_TOOL
+	} else {
+		theme = _NO_THEME
+	}
+	if theme == _UPGRADE_TOOL {
+		if progress == 0 {
+			logger.Debugf("activate the upgrade roll back progress theme")
+			util.ExecCommand("/usr/bin/plymouth", []string{"change-mode", "--system-upgrade"})
+		}
+		logger.Debugf("update progress %d", progress)
+		plymouth.UpdateProgress(progress)
+	}
+}
+
+func (c *Upgrader) SetRepoMount(repoMount string) (*config.Config, error) {
+	var err error
+	if !util.IsExists(repoMount) {
+		return nil, errors.New("repo mount isn't exist")
+	}
+	c.conf.ChangeRepoMountPoint(repoMount)
+	c.conf, err = c.conf.ReLoadConfig(c.rootMP, repoMount)
+	return c.conf, err
+}
+
 func (c *Upgrader) SendingSignal(evHandler func(op, state int32, target, desc string),
 	op opType, exitCode stateType, version, err string) {
 	if evHandler == nil {
@@ -1354,8 +1406,16 @@ func (c *Upgrader) SendSystemNotice() error {
 		}
 		time.Sleep(5 * time.Second) // wait for osd dbus
 		const selfRuning = "/usr/bin/deepin-upgrade-manager-tool --action=notify"
+
 		if len(c.recordsInfo.AferRun) > 0 && c.recordsInfo.AferRun != selfRuning {
-			return util.ExecCommand(c.recordsInfo.AferRun, []string{})
+			context := strings.Fields(c.recordsInfo.AferRun)
+			var arg []string
+			action := context[0]
+			if len(context) > 1 {
+				arg = context[1:]
+			}
+			logger.Debugf("exec command %s,action %s", c.recordsInfo.AferRun, arg)
+			return util.ExecCommand(action, arg)
 		} else {
 			return notify.SetNotifyText(backMsg)
 		}

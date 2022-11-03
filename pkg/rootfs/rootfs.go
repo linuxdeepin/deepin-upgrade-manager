@@ -1,7 +1,7 @@
 package rootfs
 
 import (
-	"deepin-upgrade-manager/pkg/config"
+	config "deepin-upgrade-manager/pkg/config/upgrader"
 	"deepin-upgrade-manager/pkg/logger"
 	"deepin-upgrade-manager/pkg/module/mountpoint"
 	"io/ioutil"

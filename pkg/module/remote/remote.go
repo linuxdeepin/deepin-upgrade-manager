@@ -2,7 +2,7 @@ package remote
 
 import (
 	"bytes"
-	"deepin-upgrade-manager/pkg/config"
+	config "deepin-upgrade-manager/pkg/config/upgrader"
 	"deepin-upgrade-manager/pkg/logger"
 	"encoding/json"
 	"fmt"

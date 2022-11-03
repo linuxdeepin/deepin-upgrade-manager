@@ -161,7 +161,7 @@ func (c *Config) AppendCommit(dirs []string, isClear bool) {
 		c.RepoList[0].SubscribeList = c.RepoList[0].SubscribeList[:0]
 	}
 	for _, v := range dirs {
-		if util.IsRootSame(c.RepoList[0].SubscribeList, v) {
+		if len(v) == 0 || util.IsRootSame(c.RepoList[0].SubscribeList, v) {
 			continue
 		} else {
 			c.RepoList[0].SubscribeList = append(c.RepoList[0].SubscribeList, v)
@@ -174,7 +174,7 @@ func (c *Config) AppendFilter(dirs []string, isClear bool) {
 		c.RepoList[0].FilterList = c.RepoList[0].FilterList[:0]
 	}
 	for _, v := range dirs {
-		if util.IsRootSame(c.RepoList[0].FilterList, v) {
+		if len(v) == 0 || util.IsRootSame(c.RepoList[0].FilterList, v) {
 			continue
 		} else {
 			c.RepoList[0].FilterList = append(c.RepoList[0].FilterList, v)
@@ -260,6 +260,27 @@ func (c *Config) SetReadyData(datapath string) error {
 	util.CopyFile(datapath, localPath, false)
 	logger.Debugf("set %s to %s", datapath, localPath)
 	return nil
+}
+
+func (c *Config) ReLoadConfig(rootDir, repoMount string) (*Config, error) {
+	repoConfig := filepath.Join(rootDir, c.RepoList[0].ConfigDir, "config.json")
+	info := new(Config)
+	if util.IsExists(repoConfig) {
+		c.Save()
+		c.filename = repoConfig
+		err := loadFile(&info, c.filename)
+
+		if err != nil {
+			return c, err
+		}
+		c = info
+		c.filename = repoConfig
+		c.ChangeRepoMountPoint(repoMount)
+		c.dataname = filepath.Join(path.Dir(c.filename), DATA_YAML_PATH)
+		c.Save()
+		return info, nil
+	}
+	return c, nil
 }
 
 func LoadConfig(filename, rootDir string) (*Config, error) {

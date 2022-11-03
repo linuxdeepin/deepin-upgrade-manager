@@ -753,7 +753,36 @@ func IsFileSame(file1, file2 string) (bool, error) {
 	if equal {
 		return equal, nil
 	}
+	equal, err = IsFileSameById(file1, file2)
+	if err != nil || !equal {
+		return false, err
+	}
 	return IsFileSameByMD5(file1, file2)
+}
+
+func IsFileSameById(file1, file2 string) (bool, error) {
+	fi1, err := os.Lstat(file1)
+	if err != nil {
+		logger.Errorf("failed Lstat file %v", err)
+		return false, err
+	}
+	fi2, err := os.Lstat(file2)
+	if err != nil {
+		return false, err
+	}
+	stat1, ok := fi1.Sys().(*syscall.Stat_t)
+	if !ok {
+		return false, nil
+	}
+	stat2, ok := fi2.Sys().(*syscall.Stat_t)
+	if !ok {
+		return false, nil
+	}
+
+	if stat1.Gid != stat2.Gid || stat1.Uid != stat2.Uid {
+		return false, nil
+	}
+	return true, nil
 }
 
 func IsFileSameByInode(file1, file2 string) (bool, error) {
@@ -781,6 +810,7 @@ func IsFileSameByInode(file1, file2 string) (bool, error) {
 	if !ok {
 		return false, nil
 	}
+
 	return stat1.Ino == stat2.Ino, nil
 }
 

@@ -59,6 +59,7 @@ func main() {
 	} else {
 		logger.NewLogger("deepin-upgrade-manager", true)
 	}
+
 	if os.Geteuid() != 0 {
 		logger.Info("Must run with privileged user")
 		os.Exit(-1)
@@ -136,6 +137,8 @@ func handleAction(m *upgrader.Upgrader, c *config.Config) {
 			os.Exit(int(exCode))
 		}
 	case _ACTION_BOOTLIST:
+		// close log
+		logger.Disable()
 		versionInfo, exCode, err := m.EnableBootList()
 		if err != nil {
 			logger.Error("failed enable boot list, err:", err)

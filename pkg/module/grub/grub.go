@@ -32,6 +32,7 @@ func Init() *GrubManager {
 		m.dbusPath = "/com/deepin/daemon/Grub2"
 		m.dbusInterface = m.dbusDest
 	}
+
 	/*
 		// default version is  v20
 		m.dbusDest = "com.deepin.daemon.Grub2"
@@ -43,6 +44,22 @@ func Init() *GrubManager {
 	m.editAuthDBusInterface = m.dbusInterface + ".EditAuthentication"
 	return &m
 }
+
+func (m *GrubManager) ChangeDbusDest() *GrubManager {
+	if m.dbusDest == "com.deepin.daemon.Grub2" {
+		m.dbusDest = "org.deepin.daemon.Grub2"
+		m.dbusPath = "/org/deepin/daemon/Grub2"
+		m.dbusInterface = m.dbusDest
+	} else {
+		m.dbusDest = "com.deepin.daemon.Grub2"
+		m.dbusPath = "/com/deepin/daemon/Grub2"
+		m.dbusInterface = m.dbusDest
+	}
+	m.editAuthDBusPath = m.dbusPath + "/EditAuthentication"
+	m.editAuthDBusInterface = m.dbusInterface + ".EditAuthentication"
+	return m
+}
+
 func (m *GrubManager) Join() error {
 	ch := make(chan bool)
 	go func(ch chan bool) {
@@ -55,6 +72,9 @@ func (m *GrubManager) Join() error {
 		}
 	}(ch)
 	canExit, err := m.IsUpdating()
+	if err != nil {
+		logger.Warning("failed get properties, %v", err)
+	}
 	if canExit && nil == err {
 		ticker := time.NewTicker(3 * time.Minute)
 		for {

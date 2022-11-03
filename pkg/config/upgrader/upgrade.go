@@ -76,6 +76,5 @@ func loadFile(info interface{}, filename string) error {
 	if err != nil {
 		return err
 	}
-
 	return json.Unmarshal(content, info)
 }

@@ -19,7 +19,7 @@ var (
 
 func main() {
 	flag.Parse()
-	logger.NewLogger("deepin-upgrade-manager-tool", true)
+	logger.NewLogger("deepin-upgrade-manager-tool", false)
 	err := util.FixEnvPath()
 	if err != nil {
 		logger.Warning("Failed to setenv:", err)

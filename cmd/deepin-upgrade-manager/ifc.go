@@ -80,6 +80,23 @@ func (m *Manager) ListVersion() ([]string, *dbus.Error) {
 	return vers, nil
 }
 
+func (m *Manager) SetRepoMount(repomount string) *dbus.Error {
+	config, err := m.upgrade.SetRepoMount(repomount)
+	if err != nil {
+		logger.Error("Failed to list version:", err)
+		return dbus.MakeFailedError(err)
+	}
+	logger.Debugf("restart to obtain version %s", config.ActiveVersion)
+	m.ActiveVersion = config.ActiveVersion
+	upgrade, err := upgrader.NewUpgrader(config,
+		*_rootDir)
+	if err != nil {
+		logger.Debugf("%v", err)
+	}
+	m.upgrade = upgrade
+	return nil
+}
+
 func (m *Manager) CancelRollback(sender dbus.Sender) *dbus.Error {
 	if !single.SetSingleInstance() {
 		return dbus.MakeFailedError(errors.New("process already exists"))

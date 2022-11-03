@@ -120,6 +120,8 @@ func (m *Manager) Wait() {
 			ticker := time.NewTicker(m.quitCheckInterval)
 			for {
 				select {
+				case <-m.quit:
+					return
 				case <-ticker.C:
 					m.mu.RLock()
 					hasCall := m.hasCall

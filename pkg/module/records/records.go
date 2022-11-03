@@ -222,7 +222,14 @@ func (info *RecordsInfo) ResetState(envVars []string) {
 		if info.TimeOut != 0 && currTimeOut != info.TimeOut {
 			err := info.grubManager.SetTimeout(info.TimeOut)
 			if err != nil {
-				logger.Warning("failed set the rollback waiting time")
+				info.grubManager = info.grubManager.ChangeDbusDest()
+				err := info.grubManager.SetTimeout(info.TimeOut)
+				if err != nil {
+					logger.Warningf("failed set the rollback waiting time, err:%v", err)
+				} else {
+					time.Sleep(1 * time.Second) // wait for grub set out time
+					info.grubManager.Join()
+				}
 			} else {
 				time.Sleep(1 * time.Second) // wait for grub set out time
 				info.grubManager.Join()
@@ -239,6 +246,7 @@ func (info *RecordsInfo) ResetState(envVars []string) {
 		if err != nil {
 			logger.Warning(err)
 		} else {
+			time.Sleep(10 * time.Second)
 			login.Close(fd)
 		}
 	}

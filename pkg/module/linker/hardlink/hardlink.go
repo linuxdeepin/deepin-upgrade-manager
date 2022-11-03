@@ -6,5 +6,6 @@ import (
 )
 
 func HardlinkDir(srcDir, dstDir string) error {
-	return util.CopyDir(srcDir, dstDir, true)
+
+	return util.CopyDir(srcDir, dstDir, []string{}, []string{}, true)
 }

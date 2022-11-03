@@ -12,9 +12,10 @@ import (
 )
 
 type Logger struct {
-	name  string
-	log   *log.Logger
-	level Priority
+	name       string
+	log        *log.Logger
+	level      Priority
+	isInStdout bool
 }
 
 type Priority int
@@ -22,6 +23,10 @@ type Priority int
 var logger Logger
 
 var stdLog = log.New(os.Stderr, "", log.Lshortfile)
+
+const (
+	defaultDebugMatchEnv = "DDE_DEBUG_MATCH"
+)
 
 const (
 	LevelDisable Priority = iota
@@ -33,25 +38,54 @@ const (
 	LevelDebug
 )
 
+func IsEnvExists(envName string) (ok bool) {
+	for _, e := range os.Environ() {
+		if strings.HasPrefix(e, envName+"=") {
+			ok = true
+			break
+		}
+	}
+	return
+}
+
+func Disable() {
+	logger.level = LevelDisable
+}
+
 func NewLogger(name string, isInitramfs bool) {
+	inStdOut := false
 	if isInitramfs {
+		inStdOut = true
 		logger = Logger{
-			name:  name,
-			log:   log.New((io.Writer(os.Stderr)), "", log.Ldate|log.Ltime),
-			level: LevelDebug,
+			name:       name,
+			log:        log.New((io.Writer(os.Stderr)), "", log.Ldate|log.Ltime),
+			level:      LevelDebug,
+			isInStdout: inStdOut,
 		}
 	} else {
 		var writer io.Writer
+		lg := new(log.Logger)
 		syslogger, err := syslog.New(syslog.LOG_DAEMON, name)
-		if err != nil {
-			writer = io.MultiWriter(os.Stderr)
-		} else {
+		if IsEnvExists(defaultDebugMatchEnv) && os.Getenv(defaultDebugMatchEnv) == name {
 			writer = io.MultiWriter(os.Stderr, syslogger)
+			inStdOut = true
+			lg = log.New(writer, "", log.Ldate|log.Ltime)
+		} else {
+			if err == nil {
+				writer = io.MultiWriter(syslogger)
+				inStdOut = false
+				lg = log.New(writer, "", log.Lmsgprefix)
+			} else {
+				writer = io.MultiWriter(os.Stderr)
+				inStdOut = false
+				lg = log.New(writer, "", log.Ldate|log.Ltime)
+			}
 		}
 		logger = Logger{
-			name:  name,
-			log:   log.New(writer, "", log.Ldate|log.Ltime),
-			level: LevelDebug,
+			name:       name,
+			log:        lg,
+			level:      LevelDebug,
+			isInStdout: inStdOut,
 		}
 	}
 }
@@ -125,19 +159,24 @@ func doBuildMsg(calldepth int, loop bool, s string) (msg string) {
 }
 
 func combineMsg(level Priority, module, msg string) (combineMsg string) {
+	var leve string
 	switch level {
 	case LevelDebug:
-		module += " [Debug]"
+		leve = " [Debug]"
 	case LevelInfo:
-		module += " [Info]"
+		leve = " [Info]"
 	case LevelWarning:
-		module += " [Warning]"
+		leve = " [Warning]"
 	case LevelError:
-		module += " [Error]"
+		leve = " [Error]"
 	case LevelFatal:
-		module += " [Fatal]"
+		leve = " [Fatal]"
 	}
-	return module + msg
+	if logger.isInStdout {
+		return module + leve + msg
+	} else {
+		return leve + msg
+	}
 }
 
 func Debug(v ...interface{}) {
