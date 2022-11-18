@@ -20,7 +20,7 @@ esac
 
 repo_mount=n
 
-atomic_upgrade_records=${rootmnt}/etc/deepin-upgrade-manager/state.records
+atomic_upgrade_records=${rootmnt}/etc/deepin-upgrade-manager/result.records
 fstable_path=${rootmnt}/etc/fstab
 
 
@@ -36,7 +36,7 @@ for x in $(cat /proc/cmdline); do
 	esac
 done
 
-if [[ "x${back_version}" = "x" ]] ||  [[ "x${backup_uuid}" = "x" ]];then
+if [[ "x${back_version}" = "x" ]] || [[ "x${backup_uuid}" = "x" ]] || test -e ${atomic_upgrade_records};then
 	exit 0
 fi
 

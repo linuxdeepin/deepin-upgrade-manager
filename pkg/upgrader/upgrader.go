@@ -4,6 +4,7 @@ import (
 	config "deepin-upgrade-manager/pkg/config/upgrader"
 	"deepin-upgrade-manager/pkg/logger"
 	"deepin-upgrade-manager/pkg/module/bootkitinfo"
+	"deepin-upgrade-manager/pkg/module/chroot"
 	"deepin-upgrade-manager/pkg/module/dirinfo"
 	"deepin-upgrade-manager/pkg/module/fstabinfo"
 	"deepin-upgrade-manager/pkg/module/generator"
@@ -45,8 +46,8 @@ const (
 	SelfRecordStatePath    = "/etc/deepin-upgrade-manager/state.records"
 	LocalNotifyDesktopPath = "/usr/share/deepin-upgrade-manager/deepin-upgrade-manager-tool.desktop"
 	AutoStartDesktopPath   = "/etc/xdg/autostart/deepin-upgrade-manager-tool.desktop"
-
-	LessKeepSize = 5 * 1024 * 1024 * 1024
+	DefaultGrubConfig      = "/etc/default/grub"
+	LessKeepSize           = 5 * 1024 * 1024 * 1024
 )
 
 const (
@@ -82,7 +83,6 @@ const (
 	_STATE_TY_FAILED_OSTREE_ROLLBACK
 	_STATE_TY_FAILED_VERSION_DELETE
 	_STATE_TY_FAILED_NO_VERSION
-	_STATE_TY_FAILED_SET_GRUB
 	_STATE_TY_RUNING stateType = 1
 )
 
@@ -138,7 +138,6 @@ func (op opType) String() string {
 		return "start to grub updating"
 	case _OP_TY_COMMIT_END:
 		return "end version submited"
-
 	case _OP_TY_ROLLBACK_PREPARING_START:
 		return "start preparing rollback"
 	case _OP_TY_ROLLBACK_PREPARING_SET_CONFIG:
@@ -234,7 +233,7 @@ func (c *Upgrader) Init() (int, error) {
 		logger.Debugf("find present system max partition is %s ,changed the repo mount point", point)
 	}
 
-	osVersion, err := util.GetOSInfo("MajorVersion")
+	osVersion, err := util.GetOSInfo("", "MajorVersion")
 	if nil != err {
 		logger.Error("failed get new version, err:", err)
 	} else {
@@ -307,7 +306,6 @@ func (c *Upgrader) Commit(newVersion, subject string, useSysData bool,
 		if err != nil {
 			logger.Error("failed auto cleanup repo, err:", err)
 		}
-
 	}
 	// prevent another update grub
 	if !isClean {
@@ -353,8 +351,19 @@ func (c *Upgrader) UpdateGrub() (stateType, error) {
 	cmd := exec.Command("update-grub")
 	cmd.Env = append(cmd.Env, langselector.LocalLangEnv()...)
 	// need save
-	cmd.Stderr = os.Stderr
-	return exitCode, cmd.Run()
+	lgfd := logger.LoggerFD()
+	if lgfd != nil {
+		cmd.Stderr = lgfd
+	} else {
+		cmd.Stderr = os.Stderr
+	}
+	err := cmd.Run()
+	if err != nil {
+		exitCode = _STATE_TY_FAILED_UPDATE_GRUB
+		return exitCode, err
+	}
+	util.ExecCommand("/usr/bin/sync", []string{})
+	return exitCode, nil
 }
 
 func (c *Upgrader) EnableBoot(version string) (stateType, error) {
@@ -377,12 +386,15 @@ func (c *Upgrader) EnableBoot(version string) (stateType, error) {
 
 func (c Upgrader) GrubTitle(version string) string {
 	var commitName, commitTime string
-
-	systemName, err := util.GetOSInfo("SystemName")
+	target := filepath.Join(c.rootMP, c.conf.RepoList[0].SnapshotDir, version)
+	if !util.IsExists(target) {
+		c.EnableBoot(version)
+	}
+	systemName, err := util.GetOSInfo(target, "SystemName")
 	if err != nil {
 		logger.Warning("failed get system name, err:", err)
 	}
-	MinorVersion, err := util.GetOSInfo("MinorVersion")
+	MinorVersion, err := util.GetOSInfo(target, "MinorVersion")
 	if err != nil {
 		logger.Warning("failed get minor version, err:", err)
 	}
@@ -425,7 +437,7 @@ func (c *Upgrader) EnableBootList() (string, int, error) {
 		os.RemoveAll(bootSnapDir)
 	}
 	var showList []string
-	osVersion, err := util.GetOSInfo("MajorVersion")
+	osVersion, err := util.GetOSInfo("", "MajorVersion")
 	if nil != err {
 		osVersion = "23"
 	}
@@ -465,9 +477,9 @@ func (c *Upgrader) Snapshot(version string) error {
 	return nil
 }
 
-func (c *Upgrader) UpdataMount(repoConf *config.RepoConfig, version string) (mountpoint.MountPointList, error) {
+func (c *Upgrader) UpdateMount(repoConf *config.RepoConfig, version string) (mountpoint.MountPointList, error) {
 	dataDir := filepath.Join(c.rootMP, repoConf.SnapshotDir, version)
-	mountedPointList, err := c.updataLoaclMount(dataDir)
+	mountedPointList, err := c.updateLoaclMount(dataDir)
 	if err != nil {
 		return mountedPointList, err
 	}
@@ -507,17 +519,17 @@ func (c *Upgrader) getRollbackInfo(version, rootdir string) (string, bool, error
 			logger.Info("start ready a old version to rollback")
 			isCanRollback = false
 		}
-		c.recordsInfo.SetReady()
-		c.recordsInfo.SetRollbackInfo(version, rootdir)
+		if !c.recordsInfo.IsReadyRollback() || c.recordsInfo.IsSucceeded() || c.recordsInfo.IsFailed() {
+			c.recordsInfo.SetReady()
+		}
 		logger.Debugf("set rollback info, version:%s, repo mount point:%s", version, c.conf.RepoList[0].RepoMountPoint)
 		return version, isCanRollback, nil
 	}
-	if len(version) == 0 && len(c.rootMP) != 1 && c.recordsInfo.IsReadyRollback() &&
-		!c.recordsInfo.IsFailed() && !c.recordsInfo.IsSucceeded() {
-		logger.Info("begin to rollback version has been set in the initramfs")
-		backVersion := c.recordsInfo.Version()
-		return backVersion, true, nil
+
+	if len(version) == 0 && !c.recordsInfo.IsSucceeded() && !c.recordsInfo.IsFailed() && c.recordsInfo.IsOper() {
+		return c.recordsInfo.RollbackVersion, true, nil
 	}
+
 	return "", false, nil
 }
 
@@ -525,25 +537,31 @@ func (c *Upgrader) Rollback(version string,
 	evHandler func(op, state int32, target, desc string)) (excode int, err error) {
 	exitCode := _STATE_TY_SUCCESS
 	c.SendingSignal(evHandler, _OP_TY_ROLLBACK_PREPARING_START, _STATE_TY_RUNING, version, "")
+
 	c.LoadRollbackRecords(true)
+	logger.Debugf("status code for the current state file, %v", c.recordsInfo.CurrentState)
 	c.SendingSignal(evHandler, _OP_TY_ROLLBACK_PREPARING_SET_CONFIG, _STATE_TY_RUNING, version, "")
-	c.UpdataProgress(0)
 	backVersion, isCanRollback, err := c.getRollbackInfo(version, c.rootMP)
 	if err != nil {
 		exitCode = _STATE_TY_FAILED_NO_REPO
 		goto failure
 	}
 	if isCanRollback && len(backVersion) != 0 {
-		logger.Info("start rollback a old version:", backVersion)
+		c.UpdateProgress(0)
+		logger.Infof("start rollback a old version: %s, state: %v.", backVersion, c.recordsInfo.CurrentState)
 		var mountedPointList mountpoint.MountPointList
 
+		if len(c.recordsInfo.RollbackVersion) == 0 {
+			c.recordsInfo.Reset(backVersion)
+		}
 		// checkout specified version file
 		err = c.Snapshot(backVersion)
 		if err != nil {
 			exitCode = _STATE_TY_FAILED_OSTREE_ROLLBACK
 			goto failure
 		}
-		c.UpdataProgress(20)
+
+		c.UpdateProgress(20)
 		// need load rollback version config
 		err := c.conf.LoadVersionData(backVersion, c.rootMP)
 		if err != nil {
@@ -552,7 +570,7 @@ func (c *Upgrader) Rollback(version string,
 		}
 		c.recordsInfo.SetAfterRun(c.conf.RepoList[0].AfterRun)
 		// update the mount of the first repo
-		mountedPointList, err = c.UpdataMount(c.conf.RepoList[0], backVersion)
+		mountedPointList, err = c.UpdateMount(c.conf.RepoList[0], backVersion)
 		if err != nil {
 			exitCode = _STATE_TY_FAILED_HANDLING_MOUNTS
 			if err != nil {
@@ -560,7 +578,7 @@ func (c *Upgrader) Rollback(version string,
 			}
 			goto failure
 		}
-		c.UpdataProgress(30)
+		c.UpdateProgress(30)
 		// rollback system files
 		for _, v := range c.conf.RepoList {
 			err = c.repoRollback(v, backVersion)
@@ -569,13 +587,11 @@ func (c *Upgrader) Rollback(version string,
 				goto failure
 			}
 		}
-		// rollback ending and need notify
-		err = util.CopyFile(filepath.Join(c.rootMP, LocalNotifyDesktopPath), filepath.Join(c.rootMP, AutoStartDesktopPath), false)
+		// before umount the partiton operations
+		err = c.AfterRollbackOper(backVersion, true)
 		if err != nil {
-			logger.Warning(err)
+			logger.Warning("failed run after rollback operation, err:", err)
 		}
-		// restore mount points under initramfs and save action version
-		c.SaveActiveVersion(backVersion)
 
 		if len(c.rootMP) != 1 {
 			var needUmountList []string
@@ -591,45 +607,52 @@ func (c *Upgrader) Rollback(version string,
 				}
 			}
 		}
+		c.UpdateProgress(100)
 	} else {
 		c.SendingSignal(evHandler, _OP_TY_ROLLBACK_PREPARING_SET_WAITTIME, _STATE_TY_RUNING, version, "")
 		if len(c.rootMP) == 1 {
 			grubManager, _ := grub.LoadGrubParams()
-			err := grubManager.SetTimeOut(0)
+			newTitle := c.GrubTitle(backVersion)
+			newHead, _ := util.GetBootKitText(msgRollBack, langselector.LocalLangEnv())
+			newDef := newHead + ">" + newTitle
+			oldT, err := grubManager.TimeOut()
 			if err != nil {
-				exitCode = _STATE_TY_FAILED_SET_GRUB
-				return int(exitCode), nil
+				oldT = 2
 			}
-			title := c.GrubTitle(backVersion)
-			head, _ := util.GetBootKitText(msgRollBack, langselector.LocalLangEnv())
-			def := head + ">" + title
-			err = grubManager.SetGrubDefault(def)
+			oldDf, err := grubManager.GrubDefault()
 			if err != nil {
-				exitCode = _STATE_TY_FAILED_SET_GRUB
-				return int(exitCode), nil
+				oldDf = "0"
 			}
-			_, err = c.UpdateGrub()
-			//need refresh grub data
-			logger.Info("end upgrade grub")
-			util.ExecCommand("/usr/bin/sync", []string{})
+			//Before setting the configuration needs to be saved
+			c.recordsInfo.SetRollbackInfo(backVersion, oldDf, newHead, oldT)
+			err = grubManager.SetTimeOut(0)
 			if err != nil {
 				exitCode = _STATE_TY_FAILED_UPDATE_GRUB
 				goto failure
 			}
+			grubManager.SetGrubDefault(newDef)
+			exitCode, err = c.UpdateGrub()
+			if err != nil {
+				exitCode = _STATE_TY_FAILED_UPDATE_GRUB
+				goto failure
+			}
+			logger.Infof("Success to set the default rollback configuratio, timeout 1, default grub %s", newDef)
 		}
 		logger.Info("start set rollback a old version:", backVersion)
 	}
 	c.SendingSignal(evHandler, _OP_TY_ROLLBACK_PREPARING_END, _STATE_TY_SUCCESS, version, "")
-	c.UpdataProgress(100)
 	logger.Info("successed run rollback action")
 	return int(exitCode), nil
 failure:
-	if int(exitCode) < int(_STATE_TY_FAILED_NO_REPO) {
-		c.recordsInfo.SetFailed(c.conf.ActiveVersion)
-		util.CopyFile(filepath.Join(c.rootMP, LocalNotifyDesktopPath), filepath.Join(c.rootMP, AutoStartDesktopPath), false)
+	//failed mount -2 < 0, running must in initramfs
+	if int(exitCode) < int(_STATE_TY_FAILED_NO_REPO) && len(c.rootMP) != 1 {
+		err = c.AfterRollbackOper(backVersion, false)
+		if err != nil {
+			logger.Warning("failed run after rollback operation, err:", err)
+		}
+		c.UpdateProgress(100)
 	}
 	c.SendingSignal(evHandler, _OP_TY_ROLLBACK_PREPARING_END, exitCode, version, err.Error())
-	c.UpdataProgress(100)
 	return int(exitCode), err
 }
 
@@ -847,7 +870,6 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 		if c.isSameFilterPartDir(v, repoConf.SubscribeList) {
 			continue
 		}
-
 		if util.IsItemInList(v, FilterPartMountedList) {
 			continue
 		}
@@ -860,7 +882,7 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 	logger.Debugf("will recovery dirs %v, files %v", realDirSubscribeList, realFileSubcribeList)
 	var err error
 	defer func() {
-		c.UpdataProgress(70)
+		c.UpdateProgress(70)
 		// if failed update, restoring the system
 		if err != nil || c.recordsInfo.IsRestore() {
 			c.recordsInfo.SetRestore()
@@ -871,9 +893,9 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 					logger.Error("failed recover rollback, err:", err)
 				}
 			}
-			c.recordsInfo.SetFailed(c.conf.ActiveVersion)
-		} else {
-			c.recordsInfo.SetSuccessfully()
+			if err == nil {
+				err = errors.New("failed rollback dir")
+			}
 		}
 		logger.Debug("need to be deleted tmp dirs:", rollbackDirList)
 		// remove all tmp dir and compatible rollback
@@ -904,85 +926,86 @@ func (c *Upgrader) repoRollback(repoConf *config.RepoConfig, version string) err
 			}
 		}
 	}()
-	// prepare the repo file under the system path
-	if c.recordsInfo.IsNeedPrepareRepoFile() {
+	if c.recordsInfo.IsNeedMainRunning() {
+		// prepare the repo file under the system path
 		for _, dir := range realDirSubscribeList {
 			err = c.handleRepoRollbak(dir, snapDir, version, FilterPartMountedList, &rollbackDirList, util.HandlerDirPrepare)
 			if err != nil {
 				return err
 			}
 		}
-	}
-	c.UpdataProgress(40)
-	// hardlink need to filter file or dir to prepare dir
-	for _, dir := range rollbackDirList {
-		dirRoot := filepath.Dir(dir)
-		filterDirs, filterFiles := util.HandlerFilterList(c.rootMP, dirRoot, repoConf.FilterList)
-		rootPartition, err := dirinfo.GetDirPartition(dirRoot)
-		if err != nil {
-			logger.Warningf("failed get %s partition", dirRoot)
-			continue
-		}
-		for _, v := range filterDirs {
-			dirPartition, err := dirinfo.GetDirPartition(v)
-			if err != nil {
-				logger.Warningf("failed get %s partition", v)
-				continue
-			}
-			if dirPartition != rootPartition {
-				continue
-			}
-			dest := filepath.Join(dir, strings.TrimPrefix(v, dirRoot))
-			util.CopyDir(v, dest, nil, nil, true)
-			logger.Debugf("ignore dir path:%s", dest)
-		}
-		for _, v := range filterFiles {
-			filePartition, err := dirinfo.GetDirPartition(v)
-			if err != nil {
-				logger.Warningf("failed get %s partition", v)
-				continue
-			}
-			if filePartition != rootPartition {
-				continue
-			}
-			dest := filepath.Join(dir, strings.TrimPrefix(v, dirRoot))
-			util.CopyFile(v, dest, true)
-			logger.Debugf("ignore file path:%s", dest)
-		}
-	}
-	var bootDir string
-	// repo files replace system files
-	c.UpdataProgress(60)
-	for _, dir := range realDirSubscribeList {
-		logger.Debug("start replacing the dir:", dir)
-		if strings.HasSuffix(filepath.Join(c.rootMP, "/boot"), dir) {
-			logger.Debugf("the %s needs to be replaced last", dir)
-			bootDir = dir
-			continue
-		}
-		err = c.handleRepoRollbak(dir, snapDir, version, FilterPartMountedList, &rollbackDirList, util.HandlerDirRollback)
-		if err != nil {
-			return err
-		}
-	}
-	// last replace /boot dir, protect system boot
-	if len(bootDir) != 0 {
-		err = c.handleRepoRollbak(bootDir, snapDir, version, FilterPartMountedList, &rollbackDirList, util.HandlerDirRollback)
-		if err != nil {
-			return err
-		}
-	}
 
-	// replace file is fast
-	if len(realFileSubcribeList) != 0 {
-		for _, v := range realFileSubcribeList {
-			realFile := util.TrimRootdir(c.rootMP, v)
-			snapFile := filepath.Join(snapDir, realFile)
-			logger.Debugf("start rolling back file, realfile:%s, snapFile:%s",
-				realFile, snapFile)
-			err := util.CopyFile(filepath.Join(c.rootMP, snapFile), filepath.Join(c.rootMP, realFile), false)
+		c.UpdateProgress(40)
+		// hardlink need to filter file or dir to prepare dir
+		for _, dir := range rollbackDirList {
+			dirRoot := filepath.Dir(dir)
+			filterDirs, filterFiles := util.HandlerFilterList(c.rootMP, dirRoot, repoConf.FilterList)
+			rootPartition, err := dirinfo.GetDirPartition(dirRoot)
+			if err != nil {
+				logger.Warningf("failed get %s partition", dirRoot)
+				continue
+			}
+			for _, v := range filterDirs {
+				dirPartition, err := dirinfo.GetDirPartition(v)
+				if err != nil {
+					logger.Warningf("failed get %s partition", v)
+					continue
+				}
+				if dirPartition != rootPartition {
+					continue
+				}
+				dest := filepath.Join(dir, strings.TrimPrefix(v, dirRoot))
+				util.CopyDir(v, dest, nil, nil, true)
+				logger.Debugf("ignore dir path:%s", dest)
+			}
+			for _, v := range filterFiles {
+				filePartition, err := dirinfo.GetDirPartition(v)
+				if err != nil {
+					logger.Warningf("failed get %s partition", v)
+					continue
+				}
+				if filePartition != rootPartition {
+					continue
+				}
+				dest := filepath.Join(dir, strings.TrimPrefix(v, dirRoot))
+				util.CopyFile(v, dest, true)
+				logger.Debugf("ignore file path:%s", dest)
+			}
+		}
+		var bootDir string
+		// repo files replace system files
+		c.UpdateProgress(60)
+		for _, dir := range realDirSubscribeList {
+			logger.Debug("start replacing the dir:", dir)
+			if strings.HasSuffix(filepath.Join(c.rootMP, "/boot"), dir) {
+				logger.Debugf("the %s needs to be replaced last", dir)
+				bootDir = dir
+				continue
+			}
+			err = c.handleRepoRollbak(dir, snapDir, version, FilterPartMountedList, &rollbackDirList, util.HandlerDirRollback)
 			if err != nil {
 				return err
+			}
+		}
+		// last replace /boot dir, protect system boot
+		if len(bootDir) != 0 {
+			err = c.handleRepoRollbak(bootDir, snapDir, version, FilterPartMountedList, &rollbackDirList, util.HandlerDirRollback)
+			if err != nil {
+				return err
+			}
+		}
+
+		// replace file is fast
+		if len(realFileSubcribeList) != 0 {
+			for _, v := range realFileSubcribeList {
+				realFile := util.TrimRootdir(c.rootMP, v)
+				snapFile := filepath.Join(snapDir, realFile)
+				logger.Debugf("start rolling back file, realfile:%s, snapFile:%s",
+					realFile, snapFile)
+				err := util.CopyFile(filepath.Join(c.rootMP, snapFile), filepath.Join(c.rootMP, realFile), false)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -1067,7 +1090,7 @@ func (c *Upgrader) isDirSpaceEnough(mountpoint, rootDir string, subscribeList []
 	return true, nil
 }
 
-func (c *Upgrader) updataLoaclMount(snapDir string) (mountpoint.MountPointList, error) {
+func (c *Upgrader) updateLoaclMount(snapDir string) (mountpoint.MountPointList, error) {
 	fstabDir := filepath.Clean(filepath.Join(snapDir, "/etc/fstab"))
 	if !util.IsExists(fstabDir) || util.IsEmptyFile(fstabDir) {
 		fstabDir = filepath.Clean(filepath.Join(c.rootMP, "/etc/fstab"))
@@ -1315,21 +1338,78 @@ func (c *Upgrader) ReadyDataPath() string {
 }
 
 func (c *Upgrader) ResetGrub() {
-	err := c.LoadRollbackRecords(false)
+	m := grub.Init()
+	err := m.Reset()
 	if err != nil {
-		logger.Warning(err)
-		return
+		logger.Warning("failed reset grub, err:", err)
+	} else {
+		m.Join()
+		c.UpdateGrub()
 	}
-	c.recordsInfo.ResetState()
 	c.recordsInfo.Remove()
-
-	// need remove auto start desktop
-	if util.IsExists(AutoStartDesktopPath) {
-		os.RemoveAll(AutoStartDesktopPath)
-	}
 }
 
-func (c *Upgrader) UpdataProgress(progress int) {
+func (c *Upgrader) AfterRollbackOper(backVersion string, isSuccessful bool) error {
+	// rollback ending and need notify
+	defer func() {
+		if isSuccessful {
+			c.recordsInfo.SetSuccessfully()
+		} else {
+			c.recordsInfo.SetFailed(backVersion)
+		}
+		logger.Debugf("save result records and remove state records, backVersion:%s, state: %v, after run:%s",
+			backVersion, int(c.recordsInfo.CurrentState), c.recordsInfo.AferRun)
+		err := c.recordsInfo.SaveResult(c.rootMP)
+		if err != nil {
+			logger.Warning(err)
+		}
+		record := filepath.Join(c.rootMP, SelfRecordStatePath)
+		if util.IsExists(record) {
+			os.RemoveAll(record)
+		}
+	}()
+	dst := filepath.Join(c.rootMP, AutoStartDesktopPath)
+	err := util.CopyFile(filepath.Join(c.rootMP, LocalNotifyDesktopPath), dst, false)
+	if err != nil {
+		logger.Warning(err)
+	}
+	err = os.Chmod(dst, 0644)
+	if err != nil {
+		logger.Warning(err)
+	}
+	c.UpdateProgress(90)
+	// restore mount points under initramfs and save action version
+	c.SaveActiveVersion(backVersion)
+	if c.recordsInfo.IsAfterOper() {
+		m, err := chroot.Start(c.rootMP)
+		if err != nil {
+			return err
+		}
+		logger.Debug("start update grub config")
+		//need restore default grub config
+		gb, err := grub.LoadGrubParams()
+		if err != nil {
+			logger.Warning("failed get grub config")
+		} else {
+			t, err := gb.TimeOut()
+			logger.Debugf("current grub time out %v, old grub time out %v", t, c.recordsInfo.TimeOut)
+			if t == 0 && err == nil {
+				gb.SetTimeOut(uint(c.recordsInfo.TimeOut))
+				gb.SetGrubDefault((c.recordsInfo.GrubDefault))
+			}
+		}
+		c.UpdateGrub()
+		err = m.Exit()
+		if err != nil {
+			return err
+		}
+	}
+	// save log to /var/log/deepin-upgrade-manager
+	logger.CopyLogFile(c.rootMP)
+	return nil
+}
+
+func (c *Upgrader) UpdateProgress(progress int) {
 	upgrade_tool_theme := "/usr/share/plymouth/themes/deepin-upgrade"
 	var theme progressTheme
 	if util.IsExists(upgrade_tool_theme) {
@@ -1342,9 +1422,10 @@ func (c *Upgrader) UpdataProgress(progress int) {
 			logger.Debugf("activate the upgrade roll back progress theme")
 			util.ExecCommand("/usr/bin/plymouth", []string{"change-mode", "--system-upgrade"})
 		}
-		logger.Debugf("update progress %d", progress)
+		logger.Infof("update progress %d", progress)
 		plymouth.UpdateProgress(progress)
 	}
+	fmt.Println("update progress:", progress)
 }
 
 func (c *Upgrader) SetRepoMount(repoMount string) (*config.Config, error) {
@@ -1372,7 +1453,7 @@ func (c *Upgrader) SendingSignal(evHandler func(op, state int32, target, desc st
 }
 
 func (c *Upgrader) SendSystemNotice() error {
-	var backMsg, grubTitle string
+	var backMsg, grubTitle, mode string
 	const atomicUpgradeDest = "org.deepin.AtomicUpgrade1"
 	const atomicUpgradePath = "/org/deepin/AtomicUpgrade1"
 
@@ -1382,51 +1463,60 @@ func (c *Upgrader) SendSystemNotice() error {
 	}
 	grubServiceObj := sysBus.Object(atomicUpgradeDest,
 		atomicUpgradePath)
-
-	if len(c.recordsInfo.RollbackVersion) == 0 {
-		return errors.New("the rollback version is empty")
+	res, afterRun, err := records.ReadResult()
+	logger.Debugf("current self run %s, res %s", afterRun, res)
+	var ret dbus.Variant
+	dbusErr := grubServiceObj.Call("org.freedesktop.DBus.Properties.Get", 0, atomicUpgradeDest, "ActiveVersion").Store(&ret)
+	activeVersion := ret.Value().(string)
+	if err != nil || dbusErr != nil {
+		return fmt.Errorf("failed to send os notify, err: %v, dbusErr: %v", err, dbusErr)
 	} else {
 		metho := atomicUpgradeDest + ".GetGrubTitle"
 		var ret dbus.Variant
-		grubServiceObj.Call(metho, 0, c.recordsInfo.RollbackVersion).Store(&ret)
+		grubServiceObj.Call(metho, 0, activeVersion).Store(&ret)
 		grubTitle = ret.Value().(string)
 	}
-	if c.recordsInfo.IsSucceeded() {
+	defer func() {
+		metho := atomicUpgradeDest + ".CancelRollback"
+		err := grubServiceObj.Call(metho, 0).Store()
+		if err != nil {
+			logger.Warning("failed send system notice, err:", err)
+		}
+	}()
+	if res == 1 {
 		text, err := util.GetUpgradeText(msgSuccessRollBack, []string{})
 		if err != nil {
 			logger.Warningf("run gettext error: %v", err)
 		}
 		msg := fmt.Sprintf(" %s", grubTitle)
 		backMsg = fmt.Sprintf(text, msg)
+		mode = "100"
 	}
 
-	if c.recordsInfo.IsFailed() {
+	if res == 0 {
 		text, err := util.GetUpgradeText(msgFailRollBack, []string{})
 		if err != nil {
 			logger.Warningf("run gettext error: %v", err)
 		}
 		msg := fmt.Sprintf(" %s", grubTitle)
 		backMsg = fmt.Sprintf(text, msg)
+		mode = "101"
 	}
 	if len(backMsg) != 0 {
-		metho := atomicUpgradeDest + ".CancelRollback"
-		err := grubServiceObj.Call(metho, 0).Store()
-		if err != nil {
-			logger.Warning("failed send system notice, err:", err)
-		}
 		time.Sleep(5 * time.Second) // wait for osd dbus
 		const selfRuning = "/usr/bin/deepin-upgrade-manager-tool --action=notify"
-
-		if len(c.recordsInfo.AferRun) > 0 && c.recordsInfo.AferRun != selfRuning {
-			context := strings.Fields(c.recordsInfo.AferRun)
+		if len(afterRun) > 0 && afterRun != selfRuning {
+			context := strings.Fields(afterRun)
 			var arg []string
 			action := context[0]
 			if len(context) > 1 {
 				arg = context[1:]
 			}
-			logger.Debugf("exec command %s,action %s", c.recordsInfo.AferRun, arg)
+			arg = append(arg, "--mode="+mode)
+			logger.Debugf("exec command %s,action %s", afterRun, arg)
 			return util.ExecCommand(action, arg)
 		} else {
+			fmt.Println(backMsg)
 			return notify.SetNotifyText(backMsg)
 		}
 	}
@@ -1443,10 +1533,19 @@ func (c *Upgrader) LoadRollbackRecords(needcreated bool) error {
 		if c.conf != nil {
 			repoPart = c.conf.RepoList[0].RepoMountPoint
 		}
-		recordsInfo = records.LoadRecords(c.rootMP, SelfRecordStatePath, repoPart)
+		recordsInfo = records.LoadRecords(c.rootMP, SelfRecordStatePath, repoPart, needcreated)
 	} else {
 		return errors.New("failed load rollback records, the file does not exist")
 	}
 	c.recordsInfo = recordsInfo
 	return nil
+}
+
+func (c *Upgrader) ClearResult() bool {
+	// need remove auto start desktop
+	if util.IsExists(AutoStartDesktopPath) && records.RemoveResult() {
+		os.RemoveAll(AutoStartDesktopPath)
+		return true
+	}
+	return false
 }

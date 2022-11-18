@@ -77,13 +77,13 @@ install-upgrader:
 	@cp -f ${PWD}/cmd/initramfs-hook/${PROG_UPGRADER} ${DESTDIR}${PREFIX}/share/initramfs-tools/hooks/
 	@cp -f ${PWD}/cmd/initramfs-hook/ostree ${DESTDIR}${PREFIX}/share/initramfs-tools/hooks/
 
+	@mkdir -p ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom
+	@cp -f ${PWD}/cmd/initramfs-scripts/${PROG_UPGRADER} ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom/
+
 	@mkdir -p ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/local-bottom
 	@cp -f ${PWD}/cmd/initramfs-scripts/${PROG_UPGRADER}-partition-mount ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/local-bottom/
 
 install-upgrader-tool:
-	install -d ${DESTDIR}${PREFIX}/share/locale
-	@cp -rv ${PWD}/out/locale/deepin-upgrade-manager/* ${DESTDIR}${PREFIX}/share/locale
-
 	@mkdir -p ${DESTDIR}${PREFIX}/bin
 	@cp -f ${PWD}/${PROG_UPGRADER_TOOL} ${DESTDIR}${PREFIX}/bin
 
@@ -91,9 +91,6 @@ install-upgrader-tool:
 	@cp -f ${PWD}/configs/upgrader/deepin-upgrade-manager-tool.desktop ${DESTDIR}${PREFIX}/share/${PROG_UPGRADER}/deepin-upgrade-manager-tool.desktop
 
 install-bootkit:
-	install -d ${DESTDIR}${PREFIX}/share/locale
-	@cp -rv ${PWD}/out/locale/deepin-boot-kit/* ${DESTDIR}${PREFIX}/share/locale
-
 	@mkdir -p ${DESTDIR}/usr/share/${PROG_BOOTKIT}/
 	@cp -f ${PWD}/configs/bootkit/config.simple.json  ${DESTDIR}/usr/share/${PROG_BOOTKIT}/config.json
 
@@ -111,19 +108,23 @@ install-bootkit:
 
 	@mkdir -p ${DESTDIR}${VAR}/${PROG_BOOTKIT}
 
-install: translate-bootkit install-bootkit translate-upgrade install-upgrader-tool install-upgrader
+install-translate:
+	install -d ${DESTDIR}${PREFIX}/share/locale
+	@cp -rv ${PWD}/out/locale/* ${DESTDIR}${PREFIX}/share/locale
 
-out/locale/deepin-boot-kit/%/LC_MESSAGES/deepin-boot-kit.mo: misc/deepin-boot-kit/po/%.po
+install: translate-bootkit translate-upgrade install-translate install-bootkit install-upgrader-tool install-upgrader
+
+out/locale/%/LC_MESSAGES/deepin-boot-kit.mo: misc/deepin-boot-kit/po/%.po
 	mkdir -p $(@D)
 	msgfmt -o $@ $<
 
-out/locale/deepin-upgrade-manager/%/LC_MESSAGES/deepin-upgrade-manager.mo: misc/deepin-upgrade-manager/po/%.po
+out/locale/%/LC_MESSAGES/deepin-upgrade-manager.mo: misc/deepin-upgrade-manager/po/%.po
 	mkdir -p $(@D)
 	msgfmt -o $@ $<
 
-translate-bootkit: $(addsuffix /LC_MESSAGES/deepin-boot-kit.mo, $(addprefix out/locale/deepin-boot-kit/, ${LANGUAGES_BOOT_KIT}))
+translate-bootkit: $(addsuffix /LC_MESSAGES/deepin-boot-kit.mo, $(addprefix out/locale/, ${LANGUAGES_BOOT_KIT}))
 
-translate-upgrade: $(addsuffix /LC_MESSAGES/deepin-upgrade-manager.mo, $(addprefix out/locale/deepin-upgrade-manager/, ${LANGUAGES_UPGRADE_MANAGER}))
+translate-upgrade: $(addsuffix /LC_MESSAGES/deepin-upgrade-manager.mo, $(addprefix out/locale/, ${LANGUAGES_UPGRADE_MANAGER}))
 
 check_code_quality:
 	go vet .

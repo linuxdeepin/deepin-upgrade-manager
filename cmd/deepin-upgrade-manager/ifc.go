@@ -98,10 +98,12 @@ func (m *Manager) SetRepoMount(repomount string) *dbus.Error {
 }
 
 func (m *Manager) CancelRollback(sender dbus.Sender) *dbus.Error {
+	if m.upgrade.ClearResult() {
+		return nil
+	}
 	if !single.SetSingleInstance() {
 		return dbus.MakeFailedError(errors.New("process already exists"))
 	}
-
 	go func() {
 		m.DelayAutoQuit()
 		m.mu.Lock()

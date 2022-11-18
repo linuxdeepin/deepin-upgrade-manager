@@ -32,17 +32,20 @@ if [[ "x${back_version}" != "x" ]];then
 fi
 
 
-atomic_upgrade_config=${rootmnt}/etc/deepin-upgrade-manager/state.records
+atomic_upgrade_state=${rootmnt}/etc/deepin-upgrade-manager/state.records
+atomic_upgrade_records=${rootmnt}/etc/deepin-upgrade-manager/result.records
+
+if [[ "x${back_version}" != "x" ]] || [[ "x${backup_uuid}" != "x" ]] \
+	|| [ ! -e ${atomic_upgrade_state} ] || [ -e ${atomic_upgrade_records} ];then
+	exit 0
+fi
 
 repo_mount=n
 
 repo_records_point_key=Repo_Mount_Point
-repo_mount_point=
-if test -e ${atomic_upgrade_config}; then
-	repo_mount_point=$(echo "$(cat ${atomic_upgrade_config})" | awk -F "[{,:}]" '{for(i=1;i<=NF;i++){if($i~"'${repo_records_point_key}'"){print $(i+1)}}}' | sed 's/\"//g')
-fi
+repo_mount_point=$(echo "$(cat ${atomic_upgrade_state})" | awk -F "[{,:}]" '{for(i=1;i<=NF;i++){if($i~"'${repo_records_point_key}'"){print $(i+1)}}}' | sed 's/\"//g')
 
-if test -n ${repo_mount_point}  && test -e ${atomic_upgrade_records};then
+if test -n ${repo_mount_point};then
 	if [ "${readonly}" = "y" ]; then
 		mount -o rw,remount ${rootmnt}
 		readonly=n

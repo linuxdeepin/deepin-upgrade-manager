@@ -27,7 +27,6 @@ func main() {
 	m := upgrader.NewUpgraderTool()
 	switch *_action {
 	case _ACTION_NOTIFY:
-		err := m.LoadRollbackRecords(false)
 		if err != nil {
 			fmt.Printf("%v", err)
 			os.Exit(-1)

@@ -2,18 +2,15 @@ package records
 
 import (
 	"deepin-upgrade-manager/pkg/logger"
-	"deepin-upgrade-manager/pkg/module/grub"
-	"deepin-upgrade-manager/pkg/module/langselector"
-	"deepin-upgrade-manager/pkg/module/login"
 	"deepin-upgrade-manager/pkg/module/util"
 	"encoding/json"
 	"io"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
-	"time"
 )
 
 type RecoredState int
@@ -21,9 +18,9 @@ type RecoredState int
 const (
 	_UNKNOW_STATE         RecoredState = -1
 	_ROLLBACK_READY_START RecoredState = iota
-	_ROLLBACK_PREPARE_REPO_FILE
-	_ROLLBACK_REPLACE_FILE
+	_ROLLBACK_MAIN_RINNING
 	_ROLLBACK_RESTORE
+	_ROLLBACK_AFTEROPER
 
 	_ROLLBACK_SUCCESSED RecoredState = 100
 	_ROLLBACK_FAILED    RecoredState = 101
@@ -34,21 +31,20 @@ type RecordsInfo struct {
 	RollbackVersion string       `json:"RollbackVersion"`
 	RepoMount       string       `json:"Repo_Mount_Point"`
 	AferRun         string       `json:"AfterRun"`
-	TimeOut         uint32       `json:"GrubTimeout"`
 
-	filename    string
-	locker      sync.RWMutex
-	grubManager *grub.GrubManager
+	TimeOut     uint   `json:"GrubTimeout"`
+	GrubDefault string `json:"GrubDefault"`
+
+	filename string
+	locker   sync.RWMutex
 }
 
 func toRecoredState(state int) RecoredState {
 	switch RecoredState(state) {
 	case _ROLLBACK_READY_START:
 		return _ROLLBACK_READY_START
-	case _ROLLBACK_PREPARE_REPO_FILE:
-		return _ROLLBACK_PREPARE_REPO_FILE
-	case _ROLLBACK_REPLACE_FILE:
-		return _ROLLBACK_REPLACE_FILE
+	case _ROLLBACK_MAIN_RINNING:
+		return _ROLLBACK_MAIN_RINNING
 	case _ROLLBACK_RESTORE:
 		return _ROLLBACK_RESTORE
 	case _ROLLBACK_SUCCESSED:
@@ -68,27 +64,32 @@ func readFile(recordsfile string, info interface{}) error {
 	return json.Unmarshal(content, info)
 }
 
-func LoadRecords(rootfs, recordsfile, repoMount string) *RecordsInfo {
-	var info RecordsInfo
+func LoadRecords(rootfs, recordsfile, repoMount string, needcreated bool) *RecordsInfo {
+	info := new(RecordsInfo)
 	path := filepath.Join(rootfs, recordsfile)
-	info.filename = path
 	info.CurrentState = _UNKNOW_STATE
 	info.TimeOut = 2
-	info.RollbackVersion = ""
-	info.AferRun = ""
 	info.RepoMount = repoMount
-	defer info.save()
+	defer func() {
+		info.filename = path
+		if needcreated {
+			info.save()
+		}
+	}()
 	if util.IsExists(path) {
-		err := readFile(path, &info)
-		if err != nil {
-			info.CurrentState = _UNKNOW_STATE
+		var record RecordsInfo
+		err := readFile(path, &record)
+		if err != nil || len(record.RollbackVersion) == 0 {
+			record.CurrentState = _UNKNOW_STATE
+		} else {
+			info = &record
+			return info
 		}
 	} else {
 		dir := filepath.Dir(path)
 		_ = os.MkdirAll(dir, 0644)
 	}
-	info.grubManager = grub.Init()
-	return &info
+	return info
 }
 
 func (info *RecordsInfo) save() error {
@@ -130,44 +131,68 @@ func (info *RecordsInfo) SetRecoredState(state int) {
 	info.CurrentState = records
 }
 
-func (info *RecordsInfo) IsNeedPrepareRepoFile() bool {
-	if int(info.CurrentState) > int(_ROLLBACK_PREPARE_REPO_FILE) {
+func (info *RecordsInfo) IsNeedMainRunning() bool {
+	if int(info.CurrentState) > int(_ROLLBACK_MAIN_RINNING) {
 		return false
 	} else {
-		info.CurrentState = _ROLLBACK_PREPARE_REPO_FILE
+		info.CurrentState = _ROLLBACK_MAIN_RINNING
 		info.save()
 		return true
 	}
 }
 
-func (info *RecordsInfo) IsNeedReplaceFile() bool {
-	if int(info.CurrentState) > int(_ROLLBACK_REPLACE_FILE) {
+func (info *RecordsInfo) IsAfterOper() bool {
+	if int(info.CurrentState) > int(_ROLLBACK_AFTEROPER) {
 		return false
 	} else {
-		info.CurrentState = _ROLLBACK_REPLACE_FILE
+		info.CurrentState = _ROLLBACK_AFTEROPER
 		info.save()
 		return true
 	}
 }
 
-func (info *RecordsInfo) SetRollbackInfo(version, rootdir string) {
+func (info *RecordsInfo) IsReadyOper() bool {
+	return info.CurrentState >= _ROLLBACK_AFTEROPER
+}
+
+func (info *RecordsInfo) IsOper() bool {
+	return info.CurrentState == _ROLLBACK_AFTEROPER
+}
+
+func (info *RecordsInfo) SetRollbackInfo(version, newdefault, oldhead string, newtime uint) {
 	info.RollbackVersion = version
-	defer info.save()
+	info.save()
+	if newtime == 0 {
+		info.TimeOut = 2
+	} else {
+		info.TimeOut = newtime
+	}
+	if len(newdefault) == 0 {
+		info.GrubDefault = "0"
+	} else if strings.Contains(newdefault, oldhead) {
+		//do nothing
+	} else {
+		info.GrubDefault = newdefault
+	}
+	logger.Infof("Success to save old grub info, old time %v, old grub default %v", info.TimeOut, info.GrubDefault)
+}
 
-	if len(rootdir) == 1 {
-		out, err := info.grubManager.TimeOut()
-		if err != nil && out != 0 {
-			logger.Warning("failed get grub out time")
-			info.TimeOut = out
-		} else {
-			info.TimeOut = 2 //default timeout
-		}
+func (info *RecordsInfo) Reset(version string) {
+	if len(info.RollbackVersion) == 0 {
+		info.RollbackVersion = version
+		info.TimeOut = 2
+		info.GrubDefault = "0"
+		info.save()
 	}
 }
 
 func (info *RecordsInfo) SetReady() {
 	info.CurrentState = _ROLLBACK_READY_START
 	info.save()
+}
+
+func (info *RecordsInfo) IsReady() bool {
+	return info.CurrentState == _ROLLBACK_READY_START
 }
 
 func (info *RecordsInfo) SetRestore() {
@@ -189,10 +214,6 @@ func (info *RecordsInfo) IsFailed() bool {
 
 func (info *RecordsInfo) IsSucceeded() bool {
 	return info.CurrentState == _ROLLBACK_SUCCESSED
-}
-
-func (info *RecordsInfo) IsReady() bool {
-	return info.CurrentState == _ROLLBACK_READY_START
 }
 
 func (info *RecordsInfo) IsReadyRollback() bool {
@@ -220,39 +241,18 @@ func (info *RecordsInfo) SetAfterRun(cmd string) {
 	info.save()
 }
 
-func (info *RecordsInfo) ResetState() {
-	if len(info.RollbackVersion) != 0 {
-		currTimeOut, _ := info.grubManager.TimeOut()
-
-		if info.TimeOut != 0 && currTimeOut != info.TimeOut {
-			err := info.grubManager.Reset()
-			if err != nil {
-				info.grubManager = info.grubManager.ChangeDbusDest()
-				err := info.grubManager.Reset()
-				if err != nil {
-					logger.Warningf("failed set the rollback waiting time, err:%v", err)
-				} else {
-					time.Sleep(1 * time.Second) // wait for grub set out time
-					info.grubManager.Join()
-				}
-			} else {
-				time.Sleep(1 * time.Second) // wait for grub set out time
-				info.grubManager.Join()
-			}
-		}
-		// Compatible with many languages
-		fd, err := login.Inhibit("shutdown", "org.deepin.AtomicUpgrade1",
-			"Updating the grub, please shut down or reboot later.")
-
-		cmd := exec.Command("update-grub")
-		cmd.Env = append(cmd.Env, langselector.LocalLangEnv()...)
-		_ = cmd.Start()
-		cmd.Wait()
-		if err != nil {
-			logger.Warning(err)
-		} else {
-			time.Sleep(10 * time.Second)
-			login.Close(fd)
-		}
+func (info *RecordsInfo) SaveResult(root string) error {
+	res := filepath.Join(root, SelfRecordResultPath)
+	if util.IsExists(res) {
+		os.RemoveAll(res)
 	}
+	file, err := os.OpenFile(res, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0777)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	bt := []byte(strconv.Itoa(int(info.CurrentState)) + "," + info.AferRun)
+	file.Write(bt)
+	file.Sync()
+	return nil
 }

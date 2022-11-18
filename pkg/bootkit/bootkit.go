@@ -51,7 +51,7 @@ func (b *Bootkit) InitVersionInfo() {
 }
 
 func (b *Bootkit) GetNewVersion() string {
-	osVersion, err := util.GetOSInfo("MajorVersion")
+	osVersion, err := util.GetOSInfo("", "MajorVersion")
 	if nil != err {
 		logger.Error("failed get new version, err:", err)
 	}

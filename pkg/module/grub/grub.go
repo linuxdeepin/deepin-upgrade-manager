@@ -18,7 +18,7 @@ type GrubManager struct {
 
 func Init() *GrubManager {
 	var m GrubManager
-	osVersion, err := util.GetOSInfo("MajorVersion")
+	osVersion, err := util.GetOSInfo("", "MajorVersion")
 	if nil != err {
 		logger.Warning("failed get new version, err:", err)
 	}
@@ -32,7 +32,6 @@ func Init() *GrubManager {
 		m.dbusPath = "/com/deepin/daemon/Grub2"
 		m.dbusInterface = m.dbusDest
 	}
-
 	/*
 		// default version is  v20
 		m.dbusDest = "com.deepin.daemon.Grub2"
@@ -42,6 +41,12 @@ func Init() *GrubManager {
 
 	m.editAuthDBusPath = m.dbusPath + "/EditAuthentication"
 	m.editAuthDBusInterface = m.dbusInterface + ".EditAuthentication"
+
+	_, err = m.TimeOut()
+	if err != nil {
+		m = *m.ChangeDbusDest()
+	}
+
 	return &m
 }
 
@@ -58,6 +63,22 @@ func (m *GrubManager) ChangeDbusDest() *GrubManager {
 	m.editAuthDBusPath = m.dbusPath + "/EditAuthentication"
 	m.editAuthDBusInterface = m.dbusInterface + ".EditAuthentication"
 	return m
+}
+
+func (m *GrubManager) Reset() error {
+	sysBus, err := dbus.SystemBus()
+	if err != nil {
+		return err
+	}
+	grubServiceObj := sysBus.Object(m.dbusDest,
+		m.dbusPath)
+	metho := m.dbusDest + ".Reset"
+
+	err = grubServiceObj.Call(metho, 0).Store()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (m *GrubManager) Join() error {
@@ -103,34 +124,6 @@ func (m *GrubManager) SetTimeout(timeout uint32) error {
 		return err
 	}
 	return nil
-}
-
-func (m *GrubManager) Reset() error {
-	sysBus, err := dbus.SystemBus()
-	if err != nil {
-		return err
-	}
-	grubServiceObj := sysBus.Object(m.dbusDest,
-		m.dbusPath)
-	metho := m.dbusDest + ".Reset"
-
-	err = grubServiceObj.Call(metho, 0).Store()
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (m *GrubManager) CancelRollback() error {
-	sysBus, err := dbus.SystemBus()
-	if err != nil {
-		return err
-	}
-	grubServiceObj := sysBus.Object(m.dbusDest,
-		m.dbusPath)
-	metho := m.dbusDest + ".CancelRollback"
-
-	return grubServiceObj.Call(metho, 0).Store()
 }
 
 func (m *GrubManager) TimeOut() (uint32, error) {

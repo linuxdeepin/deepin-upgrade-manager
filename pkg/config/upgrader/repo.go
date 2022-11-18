@@ -191,11 +191,15 @@ func (c *Config) LoadData(path string) {
 
 	c.AppendCommit(dataCf.Target.Backup_list, true)
 	c.AppendFilter(dataCf.Target.Hold_list, true)
-
 	c.RepoList[0].AfterRun = dataCf.Target.After_run
+	const versionManager = "/var/lib/deepin-boot-kit"
 	for _, v := range c.RepoList[0].SubscribeList {
 		if strings.HasPrefix(c.RepoList[0].RepoMountPoint, v) {
 			c.AppendFilter([]string{filepath.Dir(c.RepoList[0].Repo)}, false)
+		}
+		//  Special handling to prevent the version number error
+		if strings.HasPrefix(versionManager, v) {
+			c.AppendFilter([]string{versionManager}, false)
 		}
 	}
 }

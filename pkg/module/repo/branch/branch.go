@@ -71,6 +71,9 @@ func Increment(branchName string) (string, error) {
 }
 
 func IsValid(branchName string) bool {
+	if len(branchName) == 0 {
+		return false
+	}
 	items := strings.Split(branchName, BRANCH_DELIM)
 	if len(items) != BRANCH_ITEM_LEN {
 		return false

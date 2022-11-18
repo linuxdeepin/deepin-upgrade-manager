@@ -6,6 +6,7 @@ import (
 	"log"
 	"log/syslog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -16,13 +17,12 @@ type Logger struct {
 	log        *log.Logger
 	level      Priority
 	isInStdout bool
+	fd         *os.File
 }
 
 type Priority int
 
 var logger Logger
-
-var stdLog = log.New(os.Stderr, "", log.Lshortfile)
 
 const (
 	defaultDebugMatchEnv = "DDE_DEBUG_MATCH"
@@ -36,6 +36,8 @@ const (
 	LevelWarning
 	LevelInfo
 	LevelDebug
+
+	OutInitrdFile = "/var/log/deepin/deepin-upgrade-manager/initramfs.log"
 )
 
 func IsEnvExists(envName string) (ok bool) {
@@ -52,16 +54,19 @@ func Disable() {
 	logger.level = LevelDisable
 }
 
+func LoggerFD() *os.File {
+	if logger.fd != nil {
+		return logger.fd
+	}
+	return nil
+}
+
 func NewLogger(name string, isInitramfs bool) {
 	inStdOut := false
 	if isInitramfs {
-		inStdOut = true
-		logger = Logger{
-			name:       name,
-			log:        log.New((io.Writer(os.Stderr)), "", log.Ldate|log.Ltime),
-			level:      LevelDebug,
-			isInStdout: inStdOut,
-		}
+		logger.name = name
+		logger.level = LevelDebug
+		OutputInitrdFile()
 	} else {
 		var writer io.Writer
 		lg := new(log.Logger)
@@ -87,6 +92,40 @@ func NewLogger(name string, isInitramfs bool) {
 			level:      LevelDebug,
 			isInStdout: inStdOut,
 		}
+	}
+}
+
+func OutPutFile(path string) {
+	os.MkdirAll(filepath.Join(filepath.Dir(path)), 0644)
+	fd, _ := os.OpenFile(path, os.O_TRUNC|os.O_WRONLY|os.O_CREATE, 0666)
+	writer := io.MultiWriter(fd)
+	writers := io.MultiWriter(writer)
+	logger.log = log.New(writers, "", log.Ldate|log.Ltime)
+	Save()
+	logger.fd = fd
+}
+
+func OutputInitrdFile() {
+	OutPutFile(OutInitrdFile)
+}
+
+func CopyLogFile(root string) {
+	Save()
+	srcList := []string{OutInitrdFile}
+	os.MkdirAll(filepath.Join(root, filepath.Dir(OutInitrdFile)), 0644)
+	for _, v := range srcList {
+		cpCmd := exec.Command("cp", "-rf", v, filepath.Join(root, v))
+		err := cpCmd.Run()
+		if err != nil {
+			fmt.Printf("failed save log, %v", err)
+		}
+	}
+}
+
+func Save() {
+	if logger.fd != nil {
+		logger.fd.Sync()
+		logger.fd.Close()
 	}
 }
 

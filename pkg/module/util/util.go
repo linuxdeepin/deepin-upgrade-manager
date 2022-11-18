@@ -1007,8 +1007,14 @@ func HandlerFilterList(rootDir, realDir string, filterList []string) (filterDirs
 	return filterDirs, filterFiles
 }
 
-func GetOSInfo(keyname string) (string, error) {
-	fh, err := os.Open(OSInfoPath)
+func GetOSInfo(target, keyname string) (string, error) {
+	var infoPath string
+	if IsExists(filepath.Join(target, OSInfoPath)) {
+		infoPath = filepath.Join(target, OSInfoPath)
+	} else {
+		infoPath = OSInfoPath
+	}
+	fh, err := os.Open(infoPath)
 	if err != nil {
 		return "", err
 	}
@@ -1094,6 +1100,7 @@ func GetBootKitText(text string, envVars []string) (string, error) {
 		cmd.Env = append(cmd.Env, envVars...)
 	}
 
+	cmd.Env = append(cmd.Env, LocalLangEnv()...)
 	getTextOut, err := cmd.Output()
 	if err != nil {
 		return text, err
