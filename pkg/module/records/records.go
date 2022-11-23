@@ -3,6 +3,7 @@ package records
 import (
 	"deepin-upgrade-manager/pkg/logger"
 	"deepin-upgrade-manager/pkg/module/grub"
+	"deepin-upgrade-manager/pkg/module/langselector"
 	"deepin-upgrade-manager/pkg/module/login"
 	"deepin-upgrade-manager/pkg/module/util"
 	"encoding/json"
@@ -190,6 +191,10 @@ func (info *RecordsInfo) IsSucceeded() bool {
 	return info.CurrentState == _ROLLBACK_SUCCESSED
 }
 
+func (info *RecordsInfo) IsReady() bool {
+	return info.CurrentState == _ROLLBACK_READY_START
+}
+
 func (info *RecordsInfo) IsReadyRollback() bool {
 	return info.CurrentState >= _ROLLBACK_READY_START
 }
@@ -215,15 +220,15 @@ func (info *RecordsInfo) SetAfterRun(cmd string) {
 	info.save()
 }
 
-func (info *RecordsInfo) ResetState(envVars []string) {
+func (info *RecordsInfo) ResetState() {
 	if len(info.RollbackVersion) != 0 {
 		currTimeOut, _ := info.grubManager.TimeOut()
 
 		if info.TimeOut != 0 && currTimeOut != info.TimeOut {
-			err := info.grubManager.SetTimeout(info.TimeOut)
+			err := info.grubManager.Reset()
 			if err != nil {
 				info.grubManager = info.grubManager.ChangeDbusDest()
-				err := info.grubManager.SetTimeout(info.TimeOut)
+				err := info.grubManager.Reset()
 				if err != nil {
 					logger.Warningf("failed set the rollback waiting time, err:%v", err)
 				} else {
@@ -240,7 +245,7 @@ func (info *RecordsInfo) ResetState(envVars []string) {
 			"Updating the grub, please shut down or reboot later.")
 
 		cmd := exec.Command("update-grub")
-		cmd.Env = append(cmd.Env, envVars...)
+		cmd.Env = append(cmd.Env, langselector.LocalLangEnv()...)
 		_ = cmd.Start()
 		cmd.Wait()
 		if err != nil {

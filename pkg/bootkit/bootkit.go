@@ -5,6 +5,7 @@ import (
 	"deepin-upgrade-manager/pkg/logger"
 	"deepin-upgrade-manager/pkg/module/generator"
 	"deepin-upgrade-manager/pkg/module/grub"
+	"deepin-upgrade-manager/pkg/module/langselector"
 	"deepin-upgrade-manager/pkg/module/util"
 	"fmt"
 	"os"
@@ -181,7 +182,7 @@ func (b *Bootkit) GenerateDefaultGrub() string {
 	}
 	UUID := os.Getenv("GRUB_DEVICE_UUID")
 	menuentry_id_option := os.Getenv("menuentry_id_option")
-	getTextOut, _ := util.GetBootKitText(msgRollBack)
+	getTextOut, _ := util.GetBootKitText(msgRollBack, langselector.LocalLangEnv())
 	submenu := fmt.Sprintf("submenu '%s' $menuentry_id_option %s 'gnulinux-advanced-%s' %s{",
 		getTextOut, menuentry_id_option, UUID, usersLine)
 	grubInfos = append(grubInfos, submenu)

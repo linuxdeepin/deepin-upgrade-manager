@@ -8,6 +8,7 @@ import (
 	"deepin-upgrade-manager/pkg/module/fstabinfo"
 	"deepin-upgrade-manager/pkg/module/generator"
 	"deepin-upgrade-manager/pkg/module/grub"
+	"deepin-upgrade-manager/pkg/module/langselector"
 	"deepin-upgrade-manager/pkg/module/mountinfo"
 	"deepin-upgrade-manager/pkg/module/mountpoint"
 	"deepin-upgrade-manager/pkg/module/notify"
@@ -32,6 +33,7 @@ import (
 
 var msgSuccessRollBack = util.Tr("Your system is successfully rolled back to %s.")
 var msgFailRollBack = util.Tr("Rollback failed. The system is reverted to %s.")
+var msgRollBack = util.Tr("System Recovery")
 
 type (
 	opType    int32
@@ -80,6 +82,7 @@ const (
 	_STATE_TY_FAILED_OSTREE_ROLLBACK
 	_STATE_TY_FAILED_VERSION_DELETE
 	_STATE_TY_FAILED_NO_VERSION
+	_STATE_TY_FAILED_SET_GRUB
 	_STATE_TY_RUNING stateType = 1
 )
 
@@ -265,7 +268,7 @@ func (c *Upgrader) SaveActiveVersion(version string) {
 	}
 }
 
-func (c *Upgrader) Commit(newVersion, subject string, useSysData bool, envVars []string,
+func (c *Upgrader) Commit(newVersion, subject string, useSysData bool,
 	evHandler func(op, state int32, target, desc string)) (excode int, err error) {
 	exitCode := _STATE_TY_SUCCESS
 	var isClean bool
@@ -309,7 +312,7 @@ func (c *Upgrader) Commit(newVersion, subject string, useSysData bool, envVars [
 	// prevent another update grub
 	if !isClean {
 		c.SendingSignal(evHandler, _OP_TY_COMMIT_GRUB_UPDATE, _STATE_TY_RUNING, newVersion, "")
-		exitCode, err = c.UpdateGrub(envVars)
+		exitCode, err = c.UpdateGrub()
 		if err != nil {
 			exitCode = _STATE_TY_FAILED_UPDATE_GRUB
 			goto failure
@@ -344,20 +347,14 @@ func (c *Upgrader) IsExistRepo() bool {
 	return true
 }
 
-func (c *Upgrader) UpdateGrub(envVars []string) (stateType, error) {
+func (c *Upgrader) UpdateGrub() (stateType, error) {
 	exitCode := _STATE_TY_SUCCESS
-	var errS strings.Builder
 	logger.Info("start update grub")
 	cmd := exec.Command("update-grub")
-	cmd.Stderr = &errS
-	cmd.Env = append(cmd.Env, envVars...)
-	out, err := cmd.Output()
-	if err != nil {
-		exitCode = _STATE_TY_FAILED_UPDATE_GRUB
-		logger.Warningf("failed update grub,err:%s, out:%s", errS.String(), string(out))
-	}
-	cmd.Wait()
-	return exitCode, err
+	cmd.Env = append(cmd.Env, langselector.LocalLangEnv()...)
+	// need save
+	cmd.Stderr = os.Stderr
+	return exitCode, cmd.Run()
 }
 
 func (c *Upgrader) EnableBoot(version string) (stateType, error) {
@@ -400,7 +397,6 @@ func (c Upgrader) GrubTitle(version string) string {
 				timeTemplate1 := "2006/01/02 15:04:05"
 				commitTime = time.Unix(t, 0).Format(timeTemplate1)
 			}
-
 		}
 	}
 	if len(commitTime) == 0 {
@@ -434,14 +430,21 @@ func (c *Upgrader) EnableBootList() (string, int, error) {
 		osVersion = "23"
 	}
 	osVersion = "v" + osVersion
-	for _, v := range list {
-		head := strings.Split(v, ".")[0]
-		if head == osVersion && generator.Less(v, c.conf.ActiveVersion) {
-			continue
+	err = c.LoadRollbackRecords(false)
+	if err == nil && branch.IsValid(c.recordsInfo.RollbackVersion) && c.recordsInfo.IsReady() {
+		c.EnableBoot(c.recordsInfo.RollbackVersion)
+		showList = append(showList, c.recordsInfo.RollbackVersion)
+	} else {
+		for _, v := range list {
+			head := strings.Split(v, ".")[0]
+			if head == osVersion && generator.Less(v, c.conf.ActiveVersion) {
+				continue
+			}
+			c.EnableBoot(v)
+			showList = append(showList, v)
 		}
-		c.EnableBoot(v)
-		showList = append(showList, v)
 	}
+
 	diskInfo := c.fsInfo.MatchDestPoint(c.conf.RepoList[0].RepoMountPoint)
 	listInfo := bootkitinfo.Load(showList, diskInfo.DiskUUID)
 	for _, v := range showList {
@@ -591,20 +594,27 @@ func (c *Upgrader) Rollback(version string,
 	} else {
 		c.SendingSignal(evHandler, _OP_TY_ROLLBACK_PREPARING_SET_WAITTIME, _STATE_TY_RUNING, version, "")
 		if len(c.rootMP) == 1 {
-			grubManager := grub.Init()
-			err := grubManager.SetTimeout(0)
+			grubManager, _ := grub.LoadGrubParams()
+			err := grubManager.SetTimeOut(0)
 			if err != nil {
-				grubManager = grubManager.ChangeDbusDest()
-				err := grubManager.SetTimeout(0)
-				if err != nil {
-					logger.Warningf("failed set the rollback waiting time, err:%v", err)
-				} else {
-					time.Sleep(1 * time.Second) // wait for grub set out time
-					grubManager.Join()
-				}
-			} else {
-				time.Sleep(1 * time.Second) // wait for grub set out time
-				grubManager.Join()
+				exitCode = _STATE_TY_FAILED_SET_GRUB
+				return int(exitCode), nil
+			}
+			title := c.GrubTitle(backVersion)
+			head, _ := util.GetBootKitText(msgRollBack, langselector.LocalLangEnv())
+			def := head + ">" + title
+			err = grubManager.SetGrubDefault(def)
+			if err != nil {
+				exitCode = _STATE_TY_FAILED_SET_GRUB
+				return int(exitCode), nil
+			}
+			_, err = c.UpdateGrub()
+			//need refresh grub data
+			logger.Info("end upgrade grub")
+			util.ExecCommand("/usr/bin/sync", []string{})
+			if err != nil {
+				exitCode = _STATE_TY_FAILED_UPDATE_GRUB
+				goto failure
 			}
 		}
 		logger.Info("start set rollback a old version:", backVersion)
@@ -1202,7 +1212,7 @@ func (c *Upgrader) Delete(version string,
 	_ = os.RemoveAll(bootDir)
 
 	c.SendingSignal(evHandler, _OP_TY_DELETE_GRUB_UPDATE, _STATE_TY_RUNING, version, "")
-	exitCode, err = c.UpdateGrub(util.LocalLangEnv())
+	exitCode, err = c.UpdateGrub()
 	if err != nil {
 		exitCode = _STATE_TY_FAILED_UPDATE_GRUB
 		goto failure
@@ -1304,13 +1314,13 @@ func (c *Upgrader) ReadyDataPath() string {
 	return c.conf.ReadyDataPath()
 }
 
-func (c *Upgrader) ResetGrub(envVars []string) {
+func (c *Upgrader) ResetGrub() {
 	err := c.LoadRollbackRecords(false)
 	if err != nil {
 		logger.Warning(err)
 		return
 	}
-	c.recordsInfo.ResetState(envVars)
+	c.recordsInfo.ResetState()
 	c.recordsInfo.Remove()
 
 	// need remove auto start desktop
@@ -1382,7 +1392,7 @@ func (c *Upgrader) SendSystemNotice() error {
 		grubTitle = ret.Value().(string)
 	}
 	if c.recordsInfo.IsSucceeded() {
-		text, err := util.GetUpgradeText(msgSuccessRollBack)
+		text, err := util.GetUpgradeText(msgSuccessRollBack, []string{})
 		if err != nil {
 			logger.Warningf("run gettext error: %v", err)
 		}
@@ -1391,7 +1401,7 @@ func (c *Upgrader) SendSystemNotice() error {
 	}
 
 	if c.recordsInfo.IsFailed() {
-		text, err := util.GetUpgradeText(msgFailRollBack)
+		text, err := util.GetUpgradeText(msgFailRollBack, []string{})
 		if err != nil {
 			logger.Warningf("run gettext error: %v", err)
 		}

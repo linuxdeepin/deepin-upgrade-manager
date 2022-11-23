@@ -113,13 +113,12 @@ func (m *Manager) CancelRollback(sender dbus.Sender) *dbus.Error {
 			m.mu.Unlock()
 			single.Remove()
 		}()
-		envVars, _ := getLocaleEnvVarsWithSender(m.conn, sender)
-		m.upgrade.ResetGrub(envVars)
+		m.upgrade.ResetGrub()
 	}()
 	return nil
 }
 
-func (m *Manager) Rollback(version string) *dbus.Error {
+func (m *Manager) Rollback(version string, sender dbus.Sender) *dbus.Error {
 	if !single.SetSingleInstance() {
 		return dbus.MakeFailedError(errors.New("process already exists"))
 	}
@@ -167,8 +166,7 @@ func (m *Manager) Commit(subject string, sender dbus.Sender) *dbus.Error {
 				version = branch.GenInitName(m.upgrade.DistributionName())
 			}
 		}
-		envVars, _ := getLocaleEnvVarsWithSender(m.conn, sender)
-		exitCode, err := m.upgrade.Commit(version, subject, true, envVars, m.emitStateChanged)
+		exitCode, err := m.upgrade.Commit(version, subject, true, m.emitStateChanged)
 		if err != nil {
 			logger.Errorf("failed to commit version, err: %v, exit code: %d:", err, exitCode)
 			return

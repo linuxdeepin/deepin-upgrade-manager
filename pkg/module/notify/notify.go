@@ -30,7 +30,7 @@ func SetNotifyText(text string) error {
 	var arg5 []string
 	var map_variable map[string]dbus.Variant
 	var arg7 int32
-	arg0, _ = util.GetBootKitText(msgRollBack)
+	arg0, _ = util.GetBootKitText(msgRollBack, []string{})
 	arg1 = 101
 	arg2 = "preferences-system"
 	arg3 = text

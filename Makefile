@@ -77,9 +77,6 @@ install-upgrader:
 	@cp -f ${PWD}/cmd/initramfs-hook/${PROG_UPGRADER} ${DESTDIR}${PREFIX}/share/initramfs-tools/hooks/
 	@cp -f ${PWD}/cmd/initramfs-hook/ostree ${DESTDIR}${PREFIX}/share/initramfs-tools/hooks/
 
-	@mkdir -p ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom
-	@cp -f ${PWD}/cmd/initramfs-scripts/${PROG_UPGRADER} ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom/
-
 	@mkdir -p ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/local-bottom
 	@cp -f ${PWD}/cmd/initramfs-scripts/${PROG_UPGRADER}-partition-mount ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/local-bottom/
 

@@ -1066,8 +1066,13 @@ func LocalLangEnv() (result []string) {
 	return
 }
 
-func GetUpgradeText(text string) (string, error) {
+func GetUpgradeText(text string, envVars []string) (string, error) {
 	cmd := exec.Command("gettext", "-d", "deepin-upgrade-manager", text)
+	if len(envVars) == 0 {
+		cmd.Env = append(cmd.Env, LocalLangEnv()...)
+	} else {
+		cmd.Env = append(cmd.Env, envVars...)
+	}
 	cmd.Env = append(cmd.Env, LocalLangEnv()...)
 	getTextOut, err := cmd.Output()
 	if err != nil {
@@ -1081,9 +1086,14 @@ func GetUpgradeText(text string) (string, error) {
 	return string(getTextOut), nil
 }
 
-func GetBootKitText(text string) (string, error) {
+func GetBootKitText(text string, envVars []string) (string, error) {
 	cmd := exec.Command("gettext", "-d", "deepin-boot-kit", text)
-	cmd.Env = append(cmd.Env, LocalLangEnv()...)
+	if len(envVars) == 0 {
+		cmd.Env = append(cmd.Env, LocalLangEnv()...)
+	} else {
+		cmd.Env = append(cmd.Env, envVars...)
+	}
+
 	getTextOut, err := cmd.Output()
 	if err != nil {
 		return text, err
