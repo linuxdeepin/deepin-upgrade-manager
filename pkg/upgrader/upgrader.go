@@ -394,7 +394,7 @@ func (c *Upgrader) EnableBoot(version string) (stateType, error) {
 }
 
 func (c Upgrader) GrubTitle(version string) string {
-	var commitName, commitTime string
+	var title, titleTail string
 	target := filepath.Join(c.rootMP, c.conf.RepoList[0].SnapshotDir, version)
 	if !util.IsExists(target) {
 		c.EnableBoot(version)
@@ -412,27 +412,31 @@ func (c Upgrader) GrubTitle(version string) string {
 	content, err := handler.Subject(version)
 	if err == nil {
 		sub, err := config.LoadSubject(content)
-		if err == nil && len(sub.Time()) > 0 {
-			t, err := strconv.ParseInt(sub.Time(), 10, 64)
-			if err == nil {
-				timeTemplate1 := "2006/01/02 15:04:05"
-				commitTime = time.Unix(t, 0).Format(timeTemplate1)
+		if err == nil {
+			if sub.IsIntall() {
+				titleTail = "nitital backup"
+			} else if len(sub.Time()) > 0 {
+				t, err := strconv.ParseInt(sub.Time(), 10, 64)
+				if err == nil {
+					timeTemplate1 := "2006/01/02 15:04:05"
+					titleTail = time.Unix(t, 0).Format(timeTemplate1)
+				}
 			}
 		}
 	}
-	if len(commitTime) == 0 {
+	if len(titleTail) == 0 {
 		time, err := handler.CommitTime(version)
 		if err == nil {
-			commitTime = strings.Replace(time, "-", "/", -1)
+			titleTail = strings.Replace(time, "-", "/", -1)
 		}
 	}
-	if len(commitTime) == 0 {
-		commitName = fmt.Sprintf("Rollback to %s", version)
+	if len(titleTail) == 0 {
+		title = fmt.Sprintf("Rollback to %s", version)
 		logger.Warning("failed get commit time, err:", err)
 	} else {
-		commitName = systemName + " " + MinorVersion + " " + "(" + commitTime + ")"
+		title = systemName + " " + MinorVersion + " " + "(" + titleTail + ")"
 	}
-	return commitName
+	return title
 }
 
 func (c *Upgrader) EnableBootList() (string, int, error) {
@@ -1353,6 +1357,8 @@ func (c *Upgrader) ResetGrub() {
 		logger.Warning("failed reset grub, err:", err)
 	} else {
 		m.Join()
+		util.ExecCommand("/usr/bin/sync", []string{})
+		time.Sleep(2 * time.Second)
 		c.UpdateGrub()
 	}
 	c.recordsInfo.Remove()

@@ -1079,7 +1079,6 @@ func GetUpgradeText(text string, envVars []string) (string, error) {
 	} else {
 		cmd.Env = append(cmd.Env, envVars...)
 	}
-	cmd.Env = append(cmd.Env, LocalLangEnv()...)
 	getTextOut, err := cmd.Output()
 	if err != nil {
 		return text, err
@@ -1099,8 +1098,6 @@ func GetBootKitText(text string, envVars []string) (string, error) {
 	} else {
 		cmd.Env = append(cmd.Env, envVars...)
 	}
-
-	cmd.Env = append(cmd.Env, LocalLangEnv()...)
 	getTextOut, err := cmd.Output()
 	if err != nil {
 		return text, err

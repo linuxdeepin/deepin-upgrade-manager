@@ -12,8 +12,20 @@ type Info struct {
 	Note           string `json:"Note"`
 }
 
+type RecoredState int
+
+const (
+	_COMMIT_SYSTEM_ RecoredState = iota
+	_COMMIT_USER_
+	_COMMIT_INSTALL_
+)
+
 func (info Info) Time() string {
 	return info.SubmissionTime
+}
+
+func (info Info) IsIntall() bool {
+	return info.SubmissionType == int(_COMMIT_INSTALL_)
 }
 
 func LoadSubject(subject string) (Info, error) {
