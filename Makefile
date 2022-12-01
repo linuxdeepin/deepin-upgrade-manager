@@ -111,7 +111,7 @@ install-bootkit:
 
 	@mkdir -p ${DESTDIR}${VAR}/${PROG_BOOTKIT}
 
-install: translate-bootkit translate-upgrade install-upgrader install-upgrader-tool install-bootkit
+install: translate-bootkit install-bootkit translate-upgrade install-upgrader-tool install-upgrader
 
 out/locale/deepin-boot-kit/%/LC_MESSAGES/deepin-boot-kit.mo: misc/deepin-boot-kit/po/%.po
 	mkdir -p $(@D)

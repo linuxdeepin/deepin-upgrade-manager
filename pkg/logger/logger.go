@@ -74,7 +74,7 @@ func NewLogger(name string, isInitramfs bool) {
 			if err == nil {
 				writer = io.MultiWriter(syslogger)
 				inStdOut = false
-				lg = log.New(writer, "", log.Lmsgprefix)
+				lg = log.New(writer, "", log.Ltime)
 			} else {
 				writer = io.MultiWriter(os.Stderr)
 				inStdOut = false
