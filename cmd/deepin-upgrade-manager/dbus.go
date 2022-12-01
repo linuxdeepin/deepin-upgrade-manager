@@ -3,6 +3,9 @@ package main
 import (
 	"deepin-upgrade-manager/pkg/logger"
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/godbus/dbus"
@@ -158,4 +161,23 @@ func (m *Manager) DelayAutoQuit() {
 	m.mu.Lock()
 	m.hasCall = true
 	m.mu.Unlock()
+}
+
+func (m *Manager) listenQuit() {
+	c := make(chan os.Signal)
+	//监听指定信号 ctrl+c kill
+	signal.Notify(c, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	go func() {
+		for s := range c {
+			logger.Debugf("signal receiving system: %v", s)
+			switch s {
+			case syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT:
+				m.upgrade.SendingExitSignal(m.emitStateChanged)
+				time.Sleep(1 * time.Second)
+				os.Exit(0)
+			default:
+
+			}
+		}
+	}()
 }

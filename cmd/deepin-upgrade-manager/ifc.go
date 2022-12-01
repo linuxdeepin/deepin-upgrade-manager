@@ -58,6 +58,7 @@ func NewManager(config *config.Config, daemon bool) (*Manager, error) {
 			return nil, err
 		}
 		m.conn = conn
+		m.listenQuit()
 	}
 
 	return m, nil

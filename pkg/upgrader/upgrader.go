@@ -72,6 +72,13 @@ const (
 	_OP_TY_DELETE_END opType = 399
 )
 
+type CurrentState struct {
+	CurOp      opType
+	CurVersion string
+}
+
+var currentState CurrentState
+
 const (
 	_STATE_TY_SUCCESS stateType = -iota
 	_STATE_TY_FAILED_NO_REPO
@@ -83,6 +90,7 @@ const (
 	_STATE_TY_FAILED_OSTREE_ROLLBACK
 	_STATE_TY_FAILED_VERSION_DELETE
 	_STATE_TY_FAILED_NO_VERSION
+	_STATE_TY_FAILED_EXIT_SIGNAL
 	_STATE_TY_RUNING stateType = 1
 )
 
@@ -120,6 +128,8 @@ func (state stateType) String() string {
 		return "version not allowed to delete"
 	case _STATE_TY_FAILED_NO_VERSION:
 		return "version does not exist"
+	case _STATE_TY_FAILED_EXIT_SIGNAL:
+		return "receiving kill signal		"
 	}
 	return "unknown"
 }
@@ -146,7 +156,6 @@ func (op opType) String() string {
 		return "start set the grub waiting time "
 	case _OP_TY_ROLLBACK_PREPARING_END:
 		return "end preparing rollback"
-
 	case _OP_TY_DELETE_START:
 		return "start remove the repo version"
 	case _OP_TY_DELETE_GRUB_UPDATE:
@@ -1438,11 +1447,20 @@ func (c *Upgrader) SetRepoMount(repoMount string) (*config.Config, error) {
 	return c.conf, err
 }
 
+func (c *Upgrader) SendingExitSignal(evHandler func(op, state int32, target, desc string)) {
+	end := (currentState.CurOp/100+1)*100 - 1
+	if end > 100 {
+		c.SendingSignal(evHandler, end, _STATE_TY_FAILED_EXIT_SIGNAL, currentState.CurVersion, "")
+	}
+}
+
 func (c *Upgrader) SendingSignal(evHandler func(op, state int32, target, desc string),
 	op opType, exitCode stateType, version, err string) {
 	if evHandler == nil {
 		return
 	}
+	currentState.CurOp = op
+	currentState.CurVersion = version
 	if len(err) != 0 {
 		evHandler(int32(op), int32(exitCode), (version),
 			fmt.Sprintf("%s: %s: %s", op.String(), exitCode.String(), err))
