@@ -1,6 +1,12 @@
+deepin-upgrade-manager (1.0.14) unstable; urgency=medium
+
+  * Increase the initramfs update grub function
+
+ -- Chenghao Liu <liuchenghao@uniontech.com>  Fri, 2 Dec 2022 17:22:03 +0800
+
 deepin-upgrade-manager (1.0.13) unstable; urgency=medium
 
-  *  Adaptation to upgrade tool
+  * Adaptation to upgrade tool
 
  -- Chenghao Liu <liuchenghao@uniontech.com>  Tue, 22 Nov 2022 17:22:03 +0800
 
