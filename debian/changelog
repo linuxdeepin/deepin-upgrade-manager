@@ -1,3 +1,9 @@
+deepin-upgrade-manager (1.0.15) unstable; urgency=medium
+
+  * Fix the log output
+
+ -- Chenghao Liu <liuchenghao@uniontech.com>  Wed, 7 Dec 2022 17:22:03 +0800
+
 deepin-upgrade-manager (1.0.14) unstable; urgency=medium
 
   * Increase the initramfs update grub function
