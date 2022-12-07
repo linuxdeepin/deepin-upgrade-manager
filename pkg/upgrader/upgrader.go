@@ -363,8 +363,6 @@ func (c *Upgrader) UpdateGrub() (stateType, error) {
 	lgfd := logger.LoggerFD()
 	if lgfd != nil {
 		cmd.Stderr = lgfd
-	} else {
-		cmd.Stderr = os.Stderr
 	}
 	err := cmd.Run()
 	if err != nil {

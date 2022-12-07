@@ -70,7 +70,7 @@ func NewLogger(name string, isInitramfs bool) {
 	} else {
 		var writer io.Writer
 		lg := new(log.Logger)
-		syslogger, err := syslog.New(syslog.LOG_DAEMON, name)
+		syslogger, err := syslog.New(syslog.LOG_INFO, name)
 		if IsEnvExists(defaultDebugMatchEnv) && os.Getenv(defaultDebugMatchEnv) == name {
 			writer = io.MultiWriter(os.Stderr, syslogger)
 			inStdOut = true
