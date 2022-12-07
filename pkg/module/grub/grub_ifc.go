@@ -45,17 +45,11 @@ func LoadGrubParams() (*GrubIfc, error) {
 	for scanner.Scan() {
 		line := scanner.Text()
 		line = strings.TrimSpace(line)
-		if (line == "") || (line[0] == '#') {
+		if (line == "") || (line[0] == '#') || !strings.Contains(line, "=") {
 			continue
 		}
-		list := strings.Split(line, "=")
-		if len(list) == 2 {
-			gbInfo.content[list[0]] = list[1]
-		} else if len(list) == 1 {
-			gbInfo.content[list[0]] = ""
-		} else {
-			continue
-		}
+		list := strings.SplitN(line, "=", 2)
+		gbInfo.content[list[0]] = list[1]
 	}
 	return &gbInfo, nil
 }
