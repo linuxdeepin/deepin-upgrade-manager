@@ -114,6 +114,44 @@ func Load(filename string) (MountInfoList, error) {
 	return infos, nil
 }
 
+func GetFilterInfo(filename string) (MountInfoList, error) {
+	fr, err := os.Open(filepath.Clean(filename))
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := fr.Close(); err != nil {
+			logger.Warningf("error closing file: %v", err)
+		}
+	}()
+	var infos MountInfoList
+	scanner := bufio.NewScanner(fr)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if len(line) == 0 {
+			continue
+		}
+		items := strings.Split(line, _MOUNTS_DELIM)
+		if len(items) != _MOUNTS_ITEM_NUM {
+			logger.Debug("invalid mounts line:", line)
+			continue
+		}
+		if isFilterFSType(items[2]) || isFilterFSType(items[0]) {
+			mountInfo := &MountInfo{
+				Partition:  items[0],
+				MountPoint: items[1],
+				FSType:     items[2],
+				Options:    items[3],
+			}
+			if isExist(*mountInfo, infos) {
+				continue
+			}
+			infos = append(infos, mountInfo)
+		}
+	}
+	return infos, nil
+}
+
 func isFilterFSType(ty string) bool {
 	list := []string{
 		"proc",
@@ -138,6 +176,8 @@ func isFilterFSType(ty string) bool {
 		"fuse.gvfsd-fuse",
 		"fuse.portal",
 		"binfmt_misc",
+		"lxcfs",
+		"fuse.lxcfs",
 	}
 	for _, v := range list {
 		if v == ty {

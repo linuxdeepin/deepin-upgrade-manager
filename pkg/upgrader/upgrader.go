@@ -737,6 +737,17 @@ func (c *Upgrader) getFilterList(filterlist, sublist []string) []string {
 			}
 		}
 	}
+	filtersMountInfo, err := mountinfo.GetFilterInfo(SelfMountPath)
+	if err == nil {
+		for _, sub := range sublist {
+			info := filtersMountInfo.Query(sub)
+			for _, v := range info {
+				if !util.IsRootSame(filterList, v.MountPoint) {
+					filterList = append(filterList, v.MountPoint)
+				}
+			}
+		}
+	}
 	return filterList
 }
 
