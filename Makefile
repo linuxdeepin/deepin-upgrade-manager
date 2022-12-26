@@ -110,17 +110,17 @@ install-bootkit:
 
 install-translate:
 	install -d ${DESTDIR}${PREFIX}/share/locale
-	@cp -rv ${PWD}/out/locale/* ${DESTDIR}${PREFIX}/share/locale
+	@cp -rfv ${PWD}/out/locale/* ${DESTDIR}${PREFIX}/share/locale
 
 install: translate-bootkit translate-upgrade install-translate install-bootkit install-upgrader-tool install-upgrader
 
 out/locale/%/LC_MESSAGES/deepin-boot-kit.mo: misc/deepin-boot-kit/po/%.po
-	mkdir -p $(@D)
-	msgfmt -o $@ $<
+	mkdir -p ${PWD}/$(@D)
+	msgfmt -o ${PWD}/$@ ${PWD}/$<
 
 out/locale/%/LC_MESSAGES/deepin-upgrade-manager.mo: misc/deepin-upgrade-manager/po/%.po
-	mkdir -p $(@D)
-	msgfmt -o $@ $<
+	mkdir -p ${PWD}/$(@D)
+	msgfmt -o ${PWD}/$@ ${PWD}/$<
 
 translate-bootkit: $(addsuffix /LC_MESSAGES/deepin-boot-kit.mo, $(addprefix out/locale/, ${LANGUAGES_BOOT_KIT}))
 
