@@ -1,8 +1,14 @@
+deepin-upgrade-manager (1.0.17) unstable; urgency=medium
+
+  * Feat create rootfs in maximum partition function
+
+ -- Chenghao Liu <liuchenghao@uniontech.com>  Tue, 27 Dec 2022 13:40:12 +0800
+
 deepin-upgrade-manager (1.0.16) unstable; urgency=medium
 
   * Fix submit failure in cgroup partition
 
- -- Chenghao Liu <liuchenghao@uniontech.com>  Tue, 26 Dec 2022 09:39:05 +0800
+ -- Chenghao Liu <liuchenghao@uniontech.com>  Mon, 26 Dec 2022 09:39:05 +0800
 
 deepin-upgrade-manager (1.0.15) unstable; urgency=medium
 
