@@ -44,6 +44,15 @@ func (infos MountInfoList) Match(dir string) *MountInfo {
 	return nil
 }
 
+func (infos MountInfoList) MatchPartition(partiton string) *MountInfo {
+	for _, info := range infos {
+		if info.Partition == partiton {
+			return info
+		}
+	}
+	return nil
+}
+
 func (infos MountInfoList) MaxPartition(dirs []string) string {
 	var max uint64
 	var dirPath string

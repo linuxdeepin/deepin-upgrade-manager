@@ -670,16 +670,20 @@ failure:
 func (c *Upgrader) repoCommit(repoConf *config.RepoConfig, newVersion, subject string,
 	useSysData bool, evHandler func(op, state int32, target, desc string)) error {
 	handler := c.repoSet[repoConf.Repo]
-	dataDir := filepath.Join(c.rootMP, c.conf.CacheDir, c.conf.Distribution)
+	var dataDir, usrDir string
 	defer func() {
 		// remove tmp dir
 		_ = os.RemoveAll(filepath.Join(c.rootMP, c.conf.CacheDir))
 	}()
 	if useSysData {
 		c.SendingSignal(evHandler, _OP_TY_COMMIT_PREPARE_DATA, _STATE_TY_RUNING, newVersion, "")
-		// judging that the space for creating temporary files is sufficient
-		usrDir := filepath.Join(c.rootMP, "/usr")
-
+		if chroot.IsEnv() {
+			usrDir = "/usr"
+		} else {
+			usrDir = c.getMostSpaceDir(c.rootMP, repoConf.SubscribeList)
+		}
+		c.conf.SetCacheDir(filepath.Join(usrDir, ".osrepo-cache"))
+		logger.Infof("to reset the temporary directory %s", c.conf.CacheDir)
 		// need to delete the repo to take up space, if a repo in the subscribeList
 		var extraSize int64
 		for _, v := range repoConf.SubscribeList {
@@ -697,6 +701,7 @@ func (c *Upgrader) repoCommit(repoConf *config.RepoConfig, newVersion, subject s
 		// need handle filter dirs
 		repoConf.FilterList = append(repoConf.FilterList, c.getFilterList(repoConf.FilterList, repoConf.SubscribeList)...)
 		repoConf.FilterList = util.RemoveSameItemInSlice(repoConf.FilterList)
+		dataDir = filepath.Join(c.rootMP, c.conf.CacheDir, c.conf.Distribution)
 		err = c.copyRepoData(c.rootMP, dataDir, repoConf.SubscribeList, repoConf.FilterList)
 		if err != nil {
 			return err
@@ -1069,6 +1074,39 @@ func (c *Upgrader) copyRepoData(rootDir, dataDir string,
 
 	}
 	return nil
+}
+
+func (c *Upgrader) getMostSpaceDir(rootDir string, subscribeList []string) string {
+	mp := make(map[string]int64)
+	var maxUsePart string
+	var max, total int64
+	for _, dir := range subscribeList {
+		srcDir := filepath.Join(rootDir, dir)
+		part, err := dirinfo.GetDirPartition(srcDir)
+		if err != nil {
+			continue
+		}
+		v, ok := mp[part]
+		if !ok {
+			mp[part] = dirinfo.GetDirSize(srcDir)
+		} else {
+			mp[part] += v + dirinfo.GetDirSize(srcDir)
+		}
+		if max < mp[part] {
+			max = mp[part]
+			maxUsePart = part
+		}
+	}
+	info := c.mountInfos.MatchPartition(maxUsePart)
+	free, _ := dirinfo.GetPartitionFreeSize(info.MountPoint)
+	for v := range mp {
+		total += mp[v]
+	}
+	logger.Debugf("maximum use space partition %s,", maxUsePart)
+	if int64(free) > (total - max) {
+		return info.MountPoint
+	}
+	return c.mountInfos.MaxPartition(subscribeList)
 }
 
 func (c *Upgrader) isDirSpaceEnough(mountpoint, rootDir string, subscribeList []string,

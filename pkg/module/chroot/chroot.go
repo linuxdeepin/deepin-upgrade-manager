@@ -2,6 +2,7 @@ package chroot
 
 import (
 	"deepin-upgrade-manager/pkg/logger"
+	"deepin-upgrade-manager/pkg/module/dirinfo"
 	"deepin-upgrade-manager/pkg/module/mountpoint"
 	"deepin-upgrade-manager/pkg/module/util"
 	"errors"
@@ -84,4 +85,15 @@ func (m Manager) Exit() error {
 		return err
 	}
 	return m.HandleUnBind()
+}
+
+func IsEnv() bool {
+	part, err := dirinfo.GetDirPartition("/")
+	if err != nil {
+		return true
+	}
+	if !util.IsExists(part) {
+		return true
+	}
+	return false
 }

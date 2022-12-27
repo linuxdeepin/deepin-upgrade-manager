@@ -156,6 +156,10 @@ func (c *Config) SetDistribution(version string) {
 	}
 }
 
+func (c *Config) SetCacheDir(dir string) {
+	c.CacheDir = dir
+}
+
 func (c *Config) AppendCommit(dirs []string, isClear bool) {
 	if isClear {
 		c.RepoList[0].SubscribeList = c.RepoList[0].SubscribeList[:0]

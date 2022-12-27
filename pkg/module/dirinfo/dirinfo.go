@@ -75,6 +75,27 @@ func GetPartitionFreeSize(dirPath string) (uint64, error) {
 	return uint64(size * 1024), nil
 }
 
+func GetPartitionUsedSize(dirPath string) (uint64, error) {
+	if !util.IsExists(dirPath) {
+		return 0, errors.New("dir isn't exist")
+	}
+	out, err := util.ExecCommandWithOut("df", []string{dirPath})
+	arrLine := strings.Split(string(out), "\n")
+	if len(arrLine) < 2 {
+		return 0, errors.New("failed get dir parttiton")
+	}
+	arrCmd := strings.Fields(arrLine[1])
+	if err != nil {
+		return 0, err
+	}
+	partition := strings.TrimSpace(arrCmd[2])
+	size, err := strconv.Atoi(partition)
+	if err != nil {
+		return 0, err
+	}
+	return uint64(size * 1024), nil
+}
+
 func GetPartitionTotalSize(dirPath string) (uint64, error) {
 	if !util.IsExists(dirPath) {
 		return 0, errors.New("dir isn't exist")
@@ -102,12 +123,26 @@ func GetDirPartition(dirPath string) (string, error) {
 	if len(arrLine) < 2 {
 		return "", errors.New("failed get dir parttiton")
 	}
-
-	arrCmd := strings.Split(arrLine[1], " ")
 	if err != nil {
 		return "", err
 	}
+	arrCmd := strings.Fields(arrLine[1])
+
 	partition := strings.TrimSpace(arrCmd[0])
+	return partition, nil
+}
+
+func GetDirPartitionDir(dirPath string) (string, error) {
+	out, err := util.ExecCommandWithOut("df", []string{dirPath})
+	arrLine := strings.Split(string(out), "\n")
+	if len(arrLine) < 2 {
+		return "", errors.New("failed get dir parttiton")
+	}
+	if err != nil {
+		return "", err
+	}
+	arrCmd := strings.Fields(arrLine[1])
+	partition := strings.TrimSpace(arrCmd[5])
 	return partition, nil
 }
 
