@@ -375,7 +375,7 @@ func (c *Upgrader) UpdateGrub() (stateType, error) {
 
 func (c *Upgrader) EnableBoot(version string) (stateType, error) {
 	exitCode := _STATE_TY_SUCCESS
-	err := c.Snapshot(version)
+	err := c.repoSnapShotSubDir(c.conf.RepoList[0], "/boot", version)
 	if err != nil {
 		exitCode = _STATE_TY_FAILED_NO_REPO
 		return exitCode, err
@@ -763,13 +763,19 @@ func (c *Upgrader) repoSnapShot(repoConf *config.RepoConfig, version string) err
 	return handler.Snapshot(version, dataDir)
 }
 
+func (c *Upgrader) repoSnapShotSubDir(repoConf *config.RepoConfig, subDir, version string) error {
+	handler := c.repoSet[repoConf.Repo]
+	dataDir := filepath.Join(c.rootMP, repoConf.SnapshotDir, version)
+	_ = os.RemoveAll(dataDir)
+	return handler.SnapshotSub(version, subDir, dataDir)
+}
+
 func (c *Upgrader) enableSnapshotBoot(snapDir, version string) error {
-	bootDir := filepath.Join(snapDir, "boot")
+	bootDir := snapDir
 	fiList, err := ioutil.ReadDir(bootDir)
 	if err != nil {
 		return err
 	}
-
 	dstDir := filepath.Join(c.rootMP, "boot/snapshot", version)
 	localBootDir := filepath.Join(c.rootMP, "/boot")
 	err = os.MkdirAll(dstDir, 0700)

@@ -131,10 +131,10 @@ func handleAction(m *upgrader.Upgrader, c *config.Config) {
 			logger.Error("must special version")
 			os.Exit(FAILED_VERSION_EXISTS)
 		}
-		exCode, err := m.EnableBoot(*_version)
+		err := m.Snapshot(*_version)
 		if err != nil {
 			logger.Errorf("snapshot %q: %v", *_version, err)
-			os.Exit(int(exCode))
+			os.Exit(int(FAILED_VERSION_EXISTS))
 		}
 	case _ACTION_BOOTLIST:
 		// close log

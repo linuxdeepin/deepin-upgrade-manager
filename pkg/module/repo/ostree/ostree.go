@@ -108,6 +108,16 @@ func (repo *OSTree) Snapshot(branchName, dstDir string) error {
 	return err
 }
 
+func (repo *OSTree) SnapshotSub(branchName, subDir, dstDir string) error {
+	if !repo.Exist(branchName) {
+		return fmt.Errorf("not found the branchName: %s", branchName)
+	}
+	_ = os.MkdirAll(filepath.Dir(dstDir), 0600)
+	_, err := doAction([]string{"checkout", "--repo=" + repo.repoDir, "--subpath=" + subDir,
+		branchName, dstDir})
+	return err
+}
+
 func (repo *OSTree) Commit(branchName, subject, dataDir string) error {
 	if !branch.IsValid(branchName) {
 		return fmt.Errorf("invalid branch name: %s", branchName)
