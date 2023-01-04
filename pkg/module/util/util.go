@@ -20,6 +20,7 @@ import (
 	"syscall"
 	"time"
 	"unicode"
+	"unicode/utf8"
 )
 
 const (
@@ -692,6 +693,8 @@ func CopyDir(src, dst string, filterDirs, filterFiles []string, enableHardlink b
 		case fiStat.Mode&syscall.S_IFREG == syscall.S_IFREG:
 			if len(filterFiles) != 0 && IsExistsPath(filterFiles, srcSub) {
 				logger.Debugf("ignore file path:%s", srcSub)
+			} else if !Isutf8(fi.Name()) {
+				logger.Debug("file name contains utf8 need to be filtered:", src+"/"+fi.Name())
 			} else {
 				err = CopyFile2(srcSub, dstSub, sfi, enableHardlink)
 			}
@@ -722,6 +725,7 @@ func CopyFile2(src, dst string, sfi os.FileInfo, enableHardlink bool) error {
 	if equal {
 		return nil
 	}
+
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
@@ -1193,4 +1197,8 @@ func SortSubDir(dirs []string) []string {
 
 func FullNeedFilters() []string {
 	return []string{"/media", "/proc", "/dev", "/sys", "/tmp", "/run"}
+}
+
+func Isutf8(s string) bool {
+	return utf8.ValidString(s)
 }

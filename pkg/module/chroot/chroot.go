@@ -24,7 +24,7 @@ func Start(root string) (Manager, error) {
 		return m, errors.New("root dir isn't exit")
 	}
 	m.target = root
-	m.mounts = append(m.mounts, []string{"/proc", "/dev", "/sys"}...)
+	m.mounts = append(m.mounts, []string{"/proc", "/dev", "/sys", "/run"}...)
 
 	err := m.HandleBind()
 	if err != nil {
