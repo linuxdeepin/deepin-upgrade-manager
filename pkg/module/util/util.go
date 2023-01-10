@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"deepin-upgrade-manager/pkg/logger"
 	"deepin-upgrade-manager/pkg/module/attr"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -1201,4 +1202,15 @@ func FullNeedFilters() []string {
 
 func Isutf8(s string) bool {
 	return utf8.ValidString(s)
+}
+
+func IsValidJson(path string) bool {
+	if !IsExists(path) {
+		return false
+	}
+	content, err := ioutil.ReadFile(filepath.Clean(path))
+	if err != nil {
+		return false
+	}
+	return json.Valid(content)
 }

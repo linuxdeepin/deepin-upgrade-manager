@@ -298,7 +298,7 @@ func LoadConfig(filename, rootDir string) (*Config, error) {
 		return nil, err
 	}
 	repoConfig := filepath.Join(rootDir, info.RepoList[0].ConfigDir, "config.json")
-	if util.IsExists(repoConfig) && repoConfig != filename {
+	if util.IsExists(repoConfig) && repoConfig != filename && util.IsValidJson(repoConfig) {
 		filename = repoConfig
 		err := loadFile(&info, filename)
 		if err != nil {
