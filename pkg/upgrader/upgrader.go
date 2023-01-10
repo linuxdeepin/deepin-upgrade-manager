@@ -1541,7 +1541,7 @@ func (c *Upgrader) SendSystemNotice() error {
 	grubServiceObj := sysBus.Object(atomicUpgradeDest,
 		atomicUpgradePath)
 	res, afterRun, err := records.ReadResult()
-	logger.Debugf("current self run %s, res %s", afterRun, res)
+	logger.Debugf("current self run %s, res %v", afterRun, res)
 	var ret dbus.Variant
 	dbusErr := grubServiceObj.Call("org.freedesktop.DBus.Properties.Get", 0, atomicUpgradeDest, "ActiveVersion").Store(&ret)
 	activeVersion := ret.Value().(string)

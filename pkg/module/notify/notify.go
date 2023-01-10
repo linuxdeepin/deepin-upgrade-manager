@@ -14,12 +14,18 @@ const (
 	NodifydbusInterface = NodifydbusDest
 )
 
+const (
+	NodifydbusDestV23      = "org.deepin.dde.Notification1"
+	NodifydbusPathV23      = "/org/deepin/dde/Notification1"
+	NodifydbusInterfaceV23 = NodifydbusDestV23
+)
+
 func SetNotifyText(text string) error {
 	sysBus, err := dbus.SessionBus()
 	if err != nil {
 		return err
 	}
-	grubServiceObj := sysBus.Object(NodifydbusDest,
+	notifyServiceObj := sysBus.Object(NodifydbusDest,
 		NodifydbusPath)
 	metho := NodifydbusInterface + ".Notify"
 	var arg0 string
@@ -39,5 +45,12 @@ func SetNotifyText(text string) error {
 	if util.IsExists("/usr/share/deepin-clone") {
 		arg2 = "deepin-clone"
 	}
-	return grubServiceObj.Call(metho, 0, arg0, arg1, arg2, arg3, arg4, arg5, map_variable, arg7).Store()
+	err = notifyServiceObj.Call(metho, 0, arg0, arg1, arg2, arg3, arg4, arg5, map_variable, arg7).Store()
+	if err != nil {
+		notifyServiceObj = sysBus.Object(NodifydbusDestV23,
+			NodifydbusPathV23)
+		metho = NodifydbusInterfaceV23 + ".Notify"
+		err = notifyServiceObj.Call(metho, 0, arg0, arg1, arg2, arg3, arg4, arg5, map_variable, arg7).Store()
+	}
+	return err
 }
