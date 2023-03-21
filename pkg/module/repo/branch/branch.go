@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2018 - 2023 UnionTech Software Technology Co., Ltd.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // branch format: <os distribution>.<major>.<minor>.<date>
 // if date equal, minor increment, else major increment and reset minor.
 // such as: v23.0.0.20220215, v23.0.1.20220215, v23.1.0.20220220
