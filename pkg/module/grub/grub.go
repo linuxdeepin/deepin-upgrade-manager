@@ -9,7 +9,7 @@ import (
 	"deepin-upgrade-manager/pkg/module/util"
 	"time"
 
-	"github.com/godbus/dbus"
+	"github.com/godbus/dbus/v5"
 )
 
 type GrubManager struct {

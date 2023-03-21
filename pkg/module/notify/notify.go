@@ -7,7 +7,7 @@ package notify
 import (
 	"deepin-upgrade-manager/pkg/module/util"
 
-	"github.com/godbus/dbus"
+	"github.com/godbus/dbus/v5"
 )
 
 var msgRollBack = util.Tr("System Recovery")
