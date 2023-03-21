@@ -10,6 +10,7 @@ VAR=/var/lib
 PWD=$(shell pwd)
 GOCODE=/usr/share/gocode
 GOPATH_DIR=gopath
+GODEP_DIR=godep
 CURRENT_DIR=$(notdir $(shell pwd))
 ARCH=$(shell arch)
 export GO111MODULE=off
@@ -18,6 +19,8 @@ export GO111MODULE=off
 all: build
 
 prepare:
+	@mkdir -p ${GODEP_DIR}/src/github.com/godbus/dbus/v5
+	@cp -r /usr/share/gocode/src/github.com/godbus/dbus/* ${GODEP_DIR}/src/github.com/godbus/dbus/v5
 	@if [ ! -d ${GOPATH_DIR}/src/${PRJ} ]; then \
 		mkdir -p ${GOPATH_DIR}/src/${PRJ}; \
 		ln -sf ${PWD}/pkg ${GOPATH_DIR}/src/${PRJ}; \
@@ -31,19 +34,19 @@ $(error, $(GOPATH))
 
 build: prepare
 	mkdir -p ${PWD}/out
-	@env GOPATH=${PWD}/${GOPATH_DIR}:${GOCODE}:${GOPATH} ls -al ${PWD}/${GOPATH_DIR}/src/deepin-upgrade-manager/*
-	@env GOPATH=${PWD}/${GOPATH_DIR}:${GOCODE}:${GOPATH} ls -al ${PWD}/${GOPATH_DIR}/src/deepin-upgrade-manager/cmd/deepin-upgrade-manager/*
-	@env GOPATH=${PWD}/${GOPATH_DIR}:${GOCODE}:${GOPATH} ls -al ${PWD}/${GOPATH_DIR}/src/deepin-upgrade-manager/cmd/deepin-boot-kit/*
+	@env GOPATH=${PWD}/${GOPATH_DIR}:${GOCODE}/${GODEP_DIR}:${GOCODE}:${GOPATH} ls -al ${PWD}/${GOPATH_DIR}/src/deepin-upgrade-manager/*
+	@env GOPATH=${PWD}/${GOPATH_DIR}:${GOCODE}/${GODEP_DIR}:${GOCODE}:${GOPATH} ls -al ${PWD}/${GOPATH_DIR}/src/deepin-upgrade-manager/cmd/deepin-upgrade-manager/*
+	@env GOPATH=${PWD}/${GOPATH_DIR}:${GOCODE}/${GODEP_DIR}:${GOCODE}:${GOPATH} ls -al ${PWD}/${GOPATH_DIR}/src/deepin-upgrade-manager/cmd/deepin-boot-kit/*
 
-	@env GOPATH=${PWD}/${GOPATH_DIR}:${GOCODE}:${GOPATH}  \
+	@env GOPATH=${PWD}/${GOPATH_DIR}"${GOCODE}/${GODEP_DIR}:${GOCODE}:${GOPATH}  \
 	CGO_CPPFLAGS="-D_FORTIFY_SOURCE=2"  CGO_LDFLAGS="-Wl,-z,relro,-z,now" \
 	go build -o ${PWD}/${PROG_UPGRADER} $(GO_BUILD_FLAGS) ${PRJ}/cmd/${PROG_UPGRADER}
 
-	@env GOPATH=${PWD}/${GOPATH_DIR}:${GOCODE}:${GOPATH} \
+	@env GOPATH=${PWD}/${GOPATH_DIR}:${GOCODE}/${GODEP_DIR}:${GOCODE}:${GOPATH} \
 	CGO_CPPFLAGS="-D_FORTIFY_SOURCE=2"  CGO_LDFLAGS="-Wl,-z,relro,-z,now" \
 	go build -o ${PWD}/${PROG_BOOTKIT} $(GO_BUILD_FLAGS) ${PRJ}/cmd/${PROG_BOOTKIT}
 
-	@env GOPATH=${PWD}/${GOPATH_DIR}:${GOCODE}:${GOPATH} \
+	@env GOPATH=${PWD}/${GOPATH_DIR}:${GOCODE}/${GODEP_DIR}:${GOCODE}:${GOPATH} \
 	CGO_CPPFLAGS="-D_FORTIFY_SOURCE=2"  CGO_LDFLAGS="-Wl,-z,relro,-z,now" \
 	go build -o ${PWD}/${PROG_UPGRADER_TOOL} $(GO_BUILD_FLAGS) ${PRJ}/cmd/${PROG_UPGRADER_TOOL}
 
