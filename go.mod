@@ -1,4 +1,4 @@
-module github.com/linuxdeepin/deepin-upgrade-manager
+module deepin-upgrade-manager
 
 go 1.15
 
