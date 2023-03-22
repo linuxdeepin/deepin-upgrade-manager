@@ -22,6 +22,8 @@ prepare:
 		mkdir -p ${GOPATH_DIR}/src/${PRJ}; \
 		ln -sf ${PWD}/pkg ${GOPATH_DIR}/src/${PRJ}; \
 		ln -sf ${PWD}/cmd ${GOPATH_DIR}/src/${PRJ}/; \
+		ln -sf ${PWD}/go.mod ${GOPATH_DIR}/src/${PRJ}; \
+		ln -sf ${PWD}/go.sum ${GOPATH_DIR}/src/${PRJ}; \
 	fi
 
 $(info, $(GOPATH))
