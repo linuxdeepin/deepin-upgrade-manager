@@ -18,7 +18,6 @@ type Repository interface {
 	List() (branch.BranchList, error)
 	ListByName(branchName string, offset, limit int) (branch.BranchList, int, error)
 	Snapshot(branchName, dstDir string) error
-	SnapshotSub(branchName, subDir, dstDir string) error
 	Commit(branchName, subject, dataDir string) error
 	Diff(baseBranch, targetBranch, dstFile string) error
 	Cat(branchName, filepath, dstFile string) error
