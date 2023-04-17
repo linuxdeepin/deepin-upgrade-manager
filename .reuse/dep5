@@ -4,7 +4,7 @@ Upstream-Contact:  UnionTech Software Technology Co., Ltd. <>
 Source: https://github.com/linuxdeepin/deepin-upgrade-manager
 
 # ci
-Files: .github/* .gitlab-ci.yml
+Files: .github/* .gitlab-ci.yml .obs/*
 Copyright: None
 License: CC0-1.0
 
@@ -30,7 +30,7 @@ Copyright: UnionTech Software Technology Co., Ltd.
 License: LGPL-3.0-or-later
 
 # Project file
-Files: Makefile .gitignore
+Files: Makefile .gitignore go.mod go.sum
 Copyright: None
 License: CC0-1.0
 
