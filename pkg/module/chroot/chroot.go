@@ -73,22 +73,25 @@ func (m Manager) HandleUnBind() error {
 	return nil
 }
 
-func (m Manager) Exit() error {
+func (m Manager) Exit() (err error) {
 	logger.Infof("exit chroot %s", m.target)
 	defer func() {
 		if m.oldf != nil {
-			m.oldf.Close()
+			if closeErr := m.oldf.Close(); err != nil {
+				err = closeErr
+			}
 		}
 	}()
-	err := m.oldf.Chdir()
+	err = m.oldf.Chdir()
 	if err != nil {
-		return err
+		return 
 	}
 	err = syscall.Chroot(".")
 	if err != nil {
-		return err
+		return 
 	}
-	return m.HandleUnBind()
+	err = m.HandleUnBind()
+	return 
 }
 
 func IsEnv() bool {
