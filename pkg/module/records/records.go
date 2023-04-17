@@ -245,18 +245,26 @@ func (info *RecordsInfo) SetAfterRun(cmd string) {
 	info.save()
 }
 
-func (info *RecordsInfo) SaveResult(root string) error {
+func (info *RecordsInfo) SaveResult(root string) (err error) {
 	res := filepath.Join(root, SelfRecordResultPath)
 	if util.IsExists(res) {
 		os.RemoveAll(res)
 	}
 	file, err := os.OpenFile(res, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0777)
 	if err != nil {
+		return
+	}
+	defer func(){
+		if closeErr := file.Close(); err != nil {
+			err = closeErr
+		}
+	}()
+	bt := []byte(strconv.Itoa(int(info.CurrentState)) + "," + info.AferRun)
+	if _, err = file.Write(bt); err != nil {
 		return err
 	}
-	defer file.Close()
-	bt := []byte(strconv.Itoa(int(info.CurrentState)) + "," + info.AferRun)
-	file.Write(bt)
-	file.Sync()
-	return nil
+	if err = file.Sync(); err != nil {
+		return err
+	}
+	return
 }

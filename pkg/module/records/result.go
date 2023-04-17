@@ -17,29 +17,34 @@ const (
 	SelfRecordResultPath = "/etc/deepin-upgrade-manager/result.records"
 )
 
-func ReadResult() (int, string, error) {
-	res := -1
-	var cmd string
+func ReadResult() (res int, cmd string, err error) {
+	res = -1
 	if !util.IsExists(SelfRecordResultPath) {
-		return res, cmd, errors.New("file isn't exist")
+		err = errors.New("file isn't exist")
+		return 
 	}
 
 	file, err := os.Open(SelfRecordResultPath)
 	if err != nil {
-		return res, cmd, err
+		return 
 	}
-	defer file.Close()
+	defer func(){
+		if closeErr := file.Close(); err != nil{
+			err = closeErr
+		}
+	}()
 	content, err := ioutil.ReadAll(file)
 	if err != nil {
-		return res, cmd, err
+		return 
 	}
 	line := strings.Split(string(content), ",")
 	if len(line) == 0 {
-		return res, cmd, errors.New("content isn't exist")
+		err = errors.New("file isn't exist")
+		return 
 	}
 	result, err := strconv.Atoi(line[0])
 	if err != nil {
-		return res, cmd, err
+		return 
 	}
 	if len(line) == 2 {
 		cmd = line[1]
@@ -50,7 +55,7 @@ func ReadResult() (int, string, error) {
 	if RecoredState(result) == _ROLLBACK_FAILED {
 		res = 0
 	}
-	return res, cmd, nil
+	return 
 }
 
 func RemoveResult() bool {

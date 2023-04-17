@@ -299,19 +299,22 @@ func IsDir(path string) bool {
 	return true
 }
 
-func RemoveAttr(src string) error {
+func RemoveAttr(src string) (err error) {
 	fd, err := os.OpenFile(src, os.O_RDONLY, 0666)
 	if err != nil {
-		return err
+		return
 	}
-	defer func() {
-		fd.Close()
+	defer func(){
+		if closeErr := fd.Close(); err != nil {
+			err = closeErr
+		}
 	}()
 	attrs, err := attr.GetAttr(fd)
 	if err != nil {
-		return err
+		return
 	}
-	return attr.UnsetAttr(fd, attrs)
+	err = attr.UnsetAttr(fd, attrs)
+	return
 }
 
 func RemoveDirAttr(orig string) error {
