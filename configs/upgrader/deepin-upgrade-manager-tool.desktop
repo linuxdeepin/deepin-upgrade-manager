@@ -3,6 +3,6 @@ Name=deepin upgrade manager tool
 Comment=deepin upgrade manager tool
 Exec=/usr/bin/deepin-upgrade-manager-tool --action=notify
 NoDisplay=true
-OnlyShowIn=Deepin
+OnlyShowIn=DDE;Deepin
 Type=Application
 X-Deepin-Vendor=user-custom
