@@ -1,3 +1,10 @@
+deepin-upgrade-manager (1.0.19) unstable; urgency=medium
+
+  * fix: modify autostart #3819
+  * The repair program could not be started automatically
+
+ -- LiChengGang <lichenggang@uniontech.com>  Tue, 09 May 2023 11:25:48 +0800
+
 deepin-upgrade-manager (1.0.18) unstable; urgency=medium
 
   * Revert:fix grub waiting too long.
