@@ -5,6 +5,7 @@
 package bootkitinfo
 
 import (
+	"deepin-upgrade-manager/pkg/logger"
 	"deepin-upgrade-manager/pkg/module/dirinfo"
 	"deepin-upgrade-manager/pkg/module/generator"
 	"deepin-upgrade-manager/pkg/module/repo/branch"
@@ -12,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io/ioutil"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -121,6 +123,11 @@ func Load(versionList []string, RepoUUID string) BootInfoList {
 	} else {
 		isAcrossPart = true
 	}
+
+	version, err := getUpdatedInitrdVersion()
+	if err != nil {
+		logger.Warning("failed to get updated initrd version")
+	}
 	for _, v := range versionList {
 		var info BootInfo
 		bootDir := filepath.Join(BOOT_SNAPSHOT_DIR, v)
@@ -129,19 +136,28 @@ func Load(versionList []string, RepoUUID string) BootInfoList {
 			continue
 		}
 		var initrds, vmlinuxs []string
-
 		for _, fi := range fiList {
 			if fi.IsDir() {
 				continue
 			}
-			if strings.HasPrefix(fi.Name(), "vmlinuz-") ||
-				strings.HasPrefix(fi.Name(), "kernel-") ||
-				strings.HasPrefix(fi.Name(), "vmlinux-") {
-				vmlinuxs = append(vmlinuxs, fi.Name())
-
-			}
-			if strings.HasPrefix(fi.Name(), "initrd.img-") {
-				initrds = append(initrds, fi.Name())
+			if version != "" {
+				if fi.Name() == "vmlinuz-"+version ||
+					fi.Name() == "kernel-"+version ||
+					fi.Name() == "vmlinux-"+version {
+					vmlinuxs = append(vmlinuxs, fi.Name())
+				}
+				if fi.Name() == "initrd.img-"+version {
+					initrds = append(initrds, fi.Name())
+				}
+			} else {
+				if strings.HasPrefix(fi.Name(), "vmlinuz-") ||
+					strings.HasPrefix(fi.Name(), "kernel-") ||
+					strings.HasPrefix(fi.Name(), "vmlinux-") {
+					vmlinuxs = append(vmlinuxs, fi.Name())
+				}
+				if strings.HasPrefix(fi.Name(), "initrd.img-") {
+					initrds = append(initrds, fi.Name())
+				}
 			}
 		}
 		if len(initrds) != 0 && len(vmlinuxs) != 0 {
@@ -163,4 +179,15 @@ func Load(versionList []string, RepoUUID string) BootInfoList {
 		infolist.VersionList = append(infolist.VersionList, &info)
 	}
 	return infolist
+}
+
+func getUpdatedInitrdVersion() (string, error) {
+	out, err := exec.Command("/usr/bin/sh", "-c", "linux-version list | linux-version sort --reverse").CombinedOutput()
+	if err != nil {
+		return "", err
+	}
+	if len(out) != 0 {
+		return strings.Split(string(out), "\n")[0], nil
+	}
+	return "", errors.New("get empty initrd versions")
 }

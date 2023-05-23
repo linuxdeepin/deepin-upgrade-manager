@@ -1,3 +1,10 @@
+deepin-upgrade-manager (1.0.20) unstable; urgency=medium
+
+  * fix: upgrade failed in multi-systems
+  * fix: upgrade failed in multi-kernels
+
+ -- Lin Xin <linxin@deepin.org>  Wed, 24 May 2023 09:50:22 +0800
+
 deepin-upgrade-manager (1.0.19) unstable; urgency=medium
 
   * fix: modify autostart #3819

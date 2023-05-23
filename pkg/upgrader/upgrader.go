@@ -1074,7 +1074,6 @@ func (c *Upgrader) copyRepoData(rootDir, dataDir string,
 				return err
 			}
 		}
-
 	}
 	return nil
 }
