@@ -142,7 +142,7 @@ func handleAction(m *upgrader.Upgrader, c *config.Config) {
 		}
 	case _ACTION_BOOTLIST:
 		// close log
-		logger.Disable()
+		// logger.Disable()
 		versionInfo, exCode, err := m.EnableBootList()
 		if err != nil {
 			logger.Error("failed enable boot list, err:", err)
