@@ -95,6 +95,7 @@ const (
 	_STATE_TY_FAILED_VERSION_DELETE
 	_STATE_TY_FAILED_NO_VERSION
 	_STATE_TY_FAILED_EXIT_SIGNAL
+	_STATE_TY_FAILED_UPDATE_INITRD
 	_STATE_TY_RUNING stateType = 1
 )
 
@@ -625,6 +626,12 @@ func (c *Upgrader) Rollback(version string,
 		c.UpdateProgress(100)
 	} else {
 		c.SendingSignal(evHandler, _OP_TY_ROLLBACK_PREPARING_SET_WAITTIME, _STATE_TY_RUNING, version, "")
+		out, err := exec.Command("/usr/sbin/deepin-boot-kit", "--action=mkinitrd").CombinedOutput()
+		if err != nil {
+			logger.Warning("update initrd failed:", string(out))
+			exitCode = _STATE_TY_FAILED_UPDATE_INITRD
+			goto failure
+		}
 		if len(c.rootMP) == 1 {
 			grubManager, _ := grub.LoadGrubParams()
 			newTitle := c.GrubTitle(backVersion)

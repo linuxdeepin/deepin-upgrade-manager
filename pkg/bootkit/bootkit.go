@@ -89,7 +89,7 @@ func (b *Bootkit) UpdateGrub() error {
 
 func (b *Bootkit) UpdateInitramfs() error {
 	logger.Info("start update initramfs")
-	err := util.ExecCommand(" update-initramfs", []string{"-u"})
+	err := util.ExecCommand(" update-initramfs", []string{"-u", "-k", "all"})
 	return err
 }
 
