@@ -23,6 +23,7 @@ type FsInfo struct {
 	FSType    string
 	Options   string
 	Bind      bool
+	Remote    bool
 }
 
 type FsInfoList []*FsInfo
@@ -36,7 +37,7 @@ func (fs FsInfoList) MaxFreePartitionPoint() (string, string) {
 			logger.Warningf("failed get par:%s size, err: %v", v.DestPoint, err)
 			continue
 		}
-		if maxFree < free {
+		if maxFree < free && !v.Remote {
 			maxFree = free
 			point = v.DestPoint
 			uuid = v.DiskUUID
@@ -137,7 +138,7 @@ func Load(filename, rootDir string) (FsInfoList, error) {
 			continue
 		} else {
 			var srcMountPoint, uuid string
-			var isBind bool
+			var isBind, isRemote bool
 			if items[1] == "none" {
 				continue
 			}
@@ -145,6 +146,9 @@ func Load(filename, rootDir string) (FsInfoList, error) {
 			if items[3] == "bind" || optionsMap["defaults"] == "bind" {
 				srcMountPoint = filepath.Join(rootDir, items[0])
 				isBind = true
+			} else if items[2] == "cifs" || items[2] == "nfs" || strings.Contains(items[2], "fuse") {
+				srcMountPoint = filepath.Join(rootDir, items[0])
+				isRemote = true
 			} else {
 				srcMountPoint, uuid, err = getPartiton(items[0], dsInfos)
 				if err != nil {
@@ -161,6 +165,7 @@ func Load(filename, rootDir string) (FsInfoList, error) {
 				FSType:    items[2],
 				Options:   items[3],
 				Bind:      isBind,
+				Remote:    isRemote,
 			})
 		}
 	}
