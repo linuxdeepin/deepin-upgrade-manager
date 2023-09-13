@@ -751,6 +751,10 @@ func (c *Upgrader) getFilterList(filterlist, sublist []string) []string {
 					filterList = append(filterList, src, dst)
 				}
 			}
+			if fs.Remote {
+				dst := util.TrimRootdir(c.rootMP, fs.DestPoint)
+				filterList = append(filterList, dst)
+			}
 		}
 	}
 	filtersMountInfo, err := mountinfo.GetFilterInfo(SelfMountPath)
@@ -1179,7 +1183,7 @@ func (c *Upgrader) updateLoaclMount(snapDir string) (mountpoint.MountPointList, 
 		return mountedPointList, err
 	}
 	for _, info := range c.fsInfo {
-		if info.SrcPoint == rootPartition || info.DestPoint == "/" {
+		if info.SrcPoint == rootPartition || info.DestPoint == "/" || info.Remote {
 			logger.Debugf("ignore mount point %s", info.DestPoint)
 			continue
 		}
