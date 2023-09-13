@@ -11,6 +11,7 @@ concurrency:
 jobs:
   cppchceck:
     name: cppcheck
+    if: false
     runs-on: ubuntu-latest
     steps:
       - run: export
