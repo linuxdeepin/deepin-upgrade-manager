@@ -1,3 +1,10 @@
+deepin-upgrade-manager (1.0.22) unstable; urgency=medium
+
+  * fix backup system failed 
+  * issues: https://github.com/linuxdeepin/developer-center/issues/5577
+
+ -- LiChengGang <lichenggang@uniontech.com>  Fri, 15 Sep 2023 13:10:48 +0800
+
 deepin-upgrade-manager (1.0.21) unstable; urgency=medium
 
   * fix rollback failed
