@@ -5,6 +5,7 @@
 package upgrader
 
 import (
+	"bufio"
 	config "deepin-upgrade-manager/pkg/config/upgrader"
 	"deepin-upgrade-manager/pkg/logger"
 	"deepin-upgrade-manager/pkg/module/bootkitinfo"
@@ -218,6 +219,67 @@ func NewUpgrader(conf *config.Config,
 	return &info, nil
 }
 
+func setPlymouthTheme() error {
+	path := "/var/cache/system-rollback-theme"
+	if _, err := os.Stat(path); err != nil {
+		err = os.Mkdir(path, 0755)
+		if err != nil {
+			return err
+		}
+	}
+	themeCacheFile := filepath.Join(path, "plymouth-default-theme")
+	var defaultTheme string
+	plymouthConfig := "/etc/plymouth/plymouthd.conf"
+	pf, err := os.Open(plymouthConfig)
+	if err != nil {
+		return err
+	}
+	scanner := bufio.NewScanner(pf)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.Contains(line, "Theme") {
+			defaultTheme = strings.Trim(strings.Split(line, "=")[1], "\n")
+		}
+	}
+	f, err := os.OpenFile(themeCacheFile, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0755)
+	if err != nil {
+		return err
+	}
+	_, err = f.WriteString(defaultTheme)
+	if err != nil {
+		return err
+	}
+	out, err := exec.Command("/usr/sbin/plymouth-set-default-theme", "-R", "deepin-upgrade").CombinedOutput()
+	if err != nil {
+		logger.Warning("failed to set upgrade plymouth theme:", string(out))
+		return err
+	}
+	return nil
+}
+
+func restorePlymouthTheme() error {
+	themeCacheFile := filepath.Join("/var/cache/system-rollback-theme", "plymouth-default-theme")
+	if _, err := os.Stat(themeCacheFile); err != nil {
+		return errors.New("cannot find default theme file")
+	}
+	// Get default plymouth theme.
+	f, err := os.Open(themeCacheFile)
+	if err != nil {
+		return err
+	}
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		if scanner.Text() != "" {
+			_, err := exec.Command("/usr/sbin/plymouth-set-default-theme", "-R", strings.Trim(scanner.Text(), "\n")).CombinedOutput()
+			if err != nil {
+				logger.Warning("failed to set default theme")
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func (c *Upgrader) ResetRepo() {
 	for key := range c.repoSet {
 		delete(c.repoSet, key)
@@ -304,6 +366,10 @@ func (c *Upgrader) Commit(newVersion, subject string, useSysData bool,
 		subject = fmt.Sprintf("Release %s", newVersion)
 	}
 	logger.Info("the version number of this submission is:", newVersion)
+	err = setPlymouthTheme()
+	if err != nil {
+		logger.Warning("failed to set plymouth theme:", err)
+	}
 	for _, v := range c.conf.RepoList {
 		err = c.repoCommit(v, newVersion, subject, useSysData, evHandler)
 		if err != nil {
@@ -311,6 +377,7 @@ func (c *Upgrader) Commit(newVersion, subject string, useSysData bool,
 			goto failure
 		}
 	}
+
 	c.SaveActiveVersion(newVersion)
 
 	// automatically clear redundant versions
@@ -329,6 +396,10 @@ func (c *Upgrader) Commit(newVersion, subject string, useSysData bool,
 			exitCode = _STATE_TY_FAILED_UPDATE_GRUB
 			goto failure
 		}
+	}
+	err = restorePlymouthTheme()
+	if err != nil {
+		logger.Warning("failed to restore plymouth theme:", err)
 	}
 
 	c.SendingSignal(evHandler, _OP_TY_COMMIT_END, _STATE_TY_SUCCESS, newVersion, "")

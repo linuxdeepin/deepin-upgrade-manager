@@ -29,6 +29,11 @@ Files: misc/deepin-boot-kit/po/*.po misc/deepin-boot-kit/po/deepin-boot-kit.pot
 Copyright: UnionTech Software Technology Co., Ltd.
 License: LGPL-3.0-or-later
 
+# plymouth 
+Files: misc/plymouth/themes/deepin-upgrade/*
+Copyright: UnionTech Software Technology Co., Ltd.
+License: LGPL-3.0-or-later
+
 # Project file
 Files: Makefile .gitignore go.mod go.sum
 Copyright: None

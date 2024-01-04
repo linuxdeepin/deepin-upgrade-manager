@@ -110,11 +110,15 @@ install-bootkit:
 
 	@mkdir -p ${DESTDIR}${VAR}/${PROG_BOOTKIT}
 
+install-plymouth:
+	install -d ${DESTDIR}${PREFIX}/share/plymouth/themes
+	@cp -rvf ${PWD}/misc/plymouth/themes/deepin-upgrade ${DESTDIR}${PREFIX}/share/plymouth/themes/
+
 install-translate:
 	install -d ${DESTDIR}${PREFIX}/share/locale
 	@cp -rfv ${PWD}/out/locale/* ${DESTDIR}${PREFIX}/share/locale
 
-install: translate-bootkit translate-upgrade install-translate install-bootkit install-upgrader-tool install-upgrader
+install: translate-bootkit translate-upgrade install-translate install-bootkit install-upgrader-tool install-upgrader install-plymouth
 
 out/locale/%/LC_MESSAGES/deepin-boot-kit.mo: misc/deepin-boot-kit/po/%.po
 	mkdir -p ${PWD}/$(@D)
@@ -163,7 +167,10 @@ uninstall-bootkit:
 	@rm -f ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom/${PROG_BOOTKIT}
 	@rm -f ${DESTDIR}${VAR}/${PROG_BOOTKIT}
 
-uninstall: uninstall-upgrader uninstall-upgrader-tool uninstall-bootkit
+uninstall-plymouth:
+	@rm -rf ${DESTDIR}${PREFIX}/share/plymouth/themes/deepin-upgrade
+
+uninstall: uninstall-upgrader uninstall-upgrader-tool uninstall-bootkit uninstall-plymouth
 
 clean:
 	@rm -rf ${GOPATH_DIR}
