@@ -11,3 +11,4 @@
 /usr/share/deepin-upgrade-manager/deepin-upgrade-manager-tool.desktop
 /usr/bin/deepin-upgrade-manager-tool
 /usr/share/locale/*/LC_MESSAGES/deepin-upgrade-manager.mo
+/usr/share/plymouth/themes/deepin-upgrade/*
