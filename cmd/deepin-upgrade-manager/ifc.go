@@ -173,7 +173,7 @@ func (m *Manager) Commit(subject string, sender dbus.Sender) *dbus.Error {
 				version = branch.GenInitName(m.upgrade.DistributionName())
 			}
 		}
-		exitCode, err := m.upgrade.Commit(version, subject, true, m.emitStateChanged)
+		exitCode, err := m.upgrade.Commit(sender, version, subject, true, m.emitStateChanged)
 		if err != nil {
 			logger.Errorf("failed to commit version, err: %v, exit code: %d:", err, exitCode)
 			return

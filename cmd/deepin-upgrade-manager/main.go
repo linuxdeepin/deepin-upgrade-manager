@@ -112,7 +112,7 @@ func handleAction(m *upgrader.Upgrader, c *config.Config) {
 			logger.Error("process already exists")
 			os.Exit(FAILED_PROCESS_EXISTS)
 		}
-		exitCode, err = m.Commit(*_version, *_subject, true, nil)
+		exitCode, err = m.Commit("", *_version, *_subject, true, nil)
 		if err != nil {
 			logger.Error("commit failed:", err)
 			os.Exit(exitCode)

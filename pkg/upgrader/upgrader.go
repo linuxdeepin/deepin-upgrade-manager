@@ -28,6 +28,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"os/user"
 	"path"
 	"path/filepath"
 	"strconv"
@@ -35,6 +36,7 @@ import (
 	"time"
 
 	"github.com/godbus/dbus/v5"
+	"github.com/linuxdeepin/go-lib/dbusutil"
 )
 
 var msgSuccessRollBack = util.Tr("Your system is successfully rolled back to %s.")
@@ -343,10 +345,12 @@ func (c *Upgrader) SaveActiveVersion(version string) {
 	}
 }
 
-func (c *Upgrader) Commit(newVersion, subject string, useSysData bool,
+func (c *Upgrader) Commit(sender dbus.Sender, newVersion, subject string, useSysData bool,
 	evHandler func(op, state int32, target, desc string)) (excode int, err error) {
 	exitCode := _STATE_TY_SUCCESS
 	var isClean bool
+	var isSystemTool bool
+
 	c.SendingSignal(evHandler, _OP_TY_COMMIT_START, _STATE_TY_RUNING, newVersion, "")
 
 	if len(newVersion) == 0 {
@@ -366,9 +370,28 @@ func (c *Upgrader) Commit(newVersion, subject string, useSysData bool,
 		subject = fmt.Sprintf("Release %s", newVersion)
 	}
 	logger.Info("the version number of this submission is:", newVersion)
-	err = setPlymouthTheme()
-	if err != nil {
-		logger.Warning("failed to set plymouth theme:", err)
+	if sender != "" {
+		service, err := dbusutil.NewSystemService()
+		if err != nil {
+			logger.Warning(err)
+		}
+		uid, err := service.GetConnUID(string(sender))
+		if err != nil {
+			logger.Warning(err)
+		}
+		user, err := user.LookupId(fmt.Sprint(uid))
+		if err != nil {
+			logger.Warning(err)
+		}
+		if user.Name == "deepin-system-upgrade-daemon" {
+			isSystemTool = true
+		}
+	}
+	if !isSystemTool {
+		err = setPlymouthTheme()
+		if err != nil {
+			logger.Warning("failed to set plymouth theme:", err)
+		}
 	}
 	for _, v := range c.conf.RepoList {
 		err = c.repoCommit(v, newVersion, subject, useSysData, evHandler)
@@ -397,9 +420,11 @@ func (c *Upgrader) Commit(newVersion, subject string, useSysData bool,
 			goto failure
 		}
 	}
-	err = restorePlymouthTheme()
-	if err != nil {
-		logger.Warning("failed to restore plymouth theme:", err)
+	if !isSystemTool {
+		err = restorePlymouthTheme()
+		if err != nil {
+			logger.Warning("failed to restore plymouth theme:", err)
+		}
 	}
 
 	c.SendingSignal(evHandler, _OP_TY_COMMIT_END, _STATE_TY_SUCCESS, newVersion, "")
@@ -734,6 +759,7 @@ func (c *Upgrader) Rollback(version string,
 		logger.Info("start set rollback a old version:", backVersion)
 	}
 	c.SendingSignal(evHandler, _OP_TY_ROLLBACK_PREPARING_END, _STATE_TY_SUCCESS, version, "")
+
 	logger.Info("successed run rollback action")
 	return int(exitCode), nil
 failure:
