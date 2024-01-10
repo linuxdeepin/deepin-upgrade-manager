@@ -488,7 +488,7 @@ func (c Upgrader) GrubTitle(version string) string {
 		sub, err := config.LoadSubject(content)
 		if err == nil {
 			if sub.IsIntall() {
-				titleTail = "nitital backup"
+				titleTail = "initital backup"
 			} else if len(sub.Time()) > 0 {
 				t, err := strconv.ParseInt(sub.Time(), 10, 64)
 				if err == nil {
