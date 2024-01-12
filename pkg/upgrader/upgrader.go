@@ -778,6 +778,7 @@ func (c *Upgrader) repoCommit(repoConf *config.RepoConfig, newVersion, subject s
 		}
 		isEnough, err := c.isDirSpaceEnough(usrDir, c.rootMP, repoConf.SubscribeList, 0-extraSize, true)
 		if err != nil || !isEnough {
+			c.SendingSignal(evHandler, _OP_TY_COMMIT_PREPARE_DATA, _STATE_TY_FAILED_NO_SPACE, newVersion, "")
 			return err
 		}
 		// need handle filter dirs
@@ -1222,7 +1223,6 @@ func (c *Upgrader) isDirSpaceEnough(mountpoint, rootDir string, subscribeList []
 	}
 	GB := 1024 * 1024 * 1024
 	free, _ := dirinfo.GetPartitionFreeSize(mountPart)
-
 	if (needSize + extraSize) > 0 {
 		needSize = needSize + extraSize
 	}
