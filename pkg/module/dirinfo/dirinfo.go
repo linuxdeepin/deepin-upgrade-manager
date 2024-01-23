@@ -150,7 +150,7 @@ func GetDirPartitionDir(dirPath string) (string, error) {
 	return partition, nil
 }
 
-func IsItemInPartiton(item string, list []string) bool {
+func IsItemInPartition(item string, list []string) bool {
 	rootPartition, _ := GetDirPartition(item)
 	for _, v := range list {
 		if !util.IsExists(v) {
