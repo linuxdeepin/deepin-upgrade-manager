@@ -249,7 +249,7 @@ func setPlymouthTheme() error {
 	if err != nil {
 		return err
 	}
-	out, err := exec.Command("/usr/sbin/plymouth-set-default-theme", "-R", "deepin-upgrade").CombinedOutput()
+	out, err := exec.Command("/usr/sbin/plymouth-set-default-theme", "-R", "deepin-recovery").CombinedOutput()
 	if err != nil {
 		logger.Warning("failed to set upgrade plymouth theme:", string(out))
 		return err
@@ -1556,7 +1556,7 @@ func (c *Upgrader) AfterRollbackOper(backVersion string, isSuccessful bool) erro
 }
 
 func (c *Upgrader) UpdateProgress(progress int) {
-	upgrade_tool_theme := "/usr/share/plymouth/themes/deepin-upgrade"
+	upgrade_tool_theme := "/usr/share/plymouth/themes/deepin-recovery"
 	var theme progressTheme
 	if util.IsExists(upgrade_tool_theme) {
 		theme = _UPGRADE_TOOL

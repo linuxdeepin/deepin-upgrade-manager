@@ -112,7 +112,7 @@ install-bootkit:
 
 install-plymouth:
 	install -d ${DESTDIR}${PREFIX}/share/plymouth/themes
-	@cp -rvf ${PWD}/misc/plymouth/themes/deepin-upgrade ${DESTDIR}${PREFIX}/share/plymouth/themes/
+	@cp -rvf ${PWD}/misc/plymouth/themes/deepin-recovery ${DESTDIR}${PREFIX}/share/plymouth/themes/
 
 install-translate:
 	install -d ${DESTDIR}${PREFIX}/share/locale
@@ -168,7 +168,7 @@ uninstall-bootkit:
 	@rm -f ${DESTDIR}${VAR}/${PROG_BOOTKIT}
 
 uninstall-plymouth:
-	@rm -rf ${DESTDIR}${PREFIX}/share/plymouth/themes/deepin-upgrade
+	@rm -rf ${DESTDIR}${PREFIX}/share/plymouth/themes/deepin-recovery
 
 uninstall: uninstall-upgrader uninstall-upgrader-tool uninstall-bootkit uninstall-plymouth
 
