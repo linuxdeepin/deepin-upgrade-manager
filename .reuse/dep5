@@ -30,7 +30,7 @@ Copyright: UnionTech Software Technology Co., Ltd.
 License: LGPL-3.0-or-later
 
 # plymouth 
-Files: misc/plymouth/themes/deepin-upgrade/*
+Files: misc/plymouth/themes/deepin-recovery/*
 Copyright: UnionTech Software Technology Co., Ltd.
 License: LGPL-3.0-or-later
 
