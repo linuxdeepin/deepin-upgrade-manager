@@ -1,3 +1,9 @@
+deepin-upgrade-manager (1.0.24) unstable; urgency=medium
+
+  * fix: conflict with deepin-system-upgrade in plymouth 
+
+ -- Lin Xin <linxin@deepin.org>  Wed, 24 Jan 2024 10:13:38 +0800
+
 deepin-upgrade-manager (1.0.23) unstable; urgency=medium
 
   * fix: https://github.com/linuxdeepin/developer-center/issues/6409
