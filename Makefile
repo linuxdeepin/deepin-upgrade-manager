@@ -100,7 +100,7 @@ install-bootkit:
 	@cp -f ${PWD}/${PROG_BOOTKIT} ${DESTDIR}${PREFIX}/sbin/
 
 	@mkdir -p ${DESTDIR}/etc/grub.d ${DESTDIR}/etc/default/grub.d
-	@cp -f ${PWD}/cmd/grub.d/15_deepin-boot-kit ${DESTDIR}/etc/grub.d
+	@cp -f ${PWD}/cmd/grub.d/99_deepin-boot-kit ${DESTDIR}/etc/grub.d
 
 	@mkdir -p ${DESTDIR}${PREFIX}/share/initramfs-tools/hooks
 	@cp -f ${PWD}/cmd/initramfs-hook/${PROG_BOOTKIT} ${DESTDIR}${PREFIX}/share/initramfs-tools/hooks/
@@ -162,7 +162,7 @@ uninstall-upgrader-tool:
 uninstall-bootkit:
 	@rm -f ${DESTDIR}${PREFIX}/sbin/${PROG_BOOTKIT}
 	@rm -f ${DESTDIR}/usr/share/${PROG_BOOTKIT}/config.json
-	@rm -f ${DESTDIR}/etc/grub.d/15_deepin-boot-kit
+	@rm -f ${DESTDIR}/etc/grub.d/99_deepin-boot-kit
 	@rm -f ${DESTDIR}${PREFIX}/share/initramfs-tools/hooks/${PROG_BOOTKIT}
 	@rm -f ${DESTDIR}${PREFIX}/share/initramfs-tools/scripts/init-bottom/${PROG_BOOTKIT}
 	@rm -f ${DESTDIR}${VAR}/${PROG_BOOTKIT}
