@@ -13,7 +13,7 @@
 \utMakeTitle{}{1.0.0}{2021-11-09}
 
 \utMakeChangeLog{
-  1.0.0 & 创建 & 闫博文 & 2021-11-09 \\
+  1.0.0 & 创建 &  & 2021-11-09 \\
   \hline
 }
 \utMakeTOC
@@ -224,21 +224,6 @@ uos 将文件分为静态文件和可变文件，静态文件是指只能在 OEM
 \item 配置：/var/etc 存储系统级配置，\$HOME/.config 存储用户级配置；
 \item 缓存：/var/cache 存储系统级缓存， \$HOME/.cache 存储用户级缓存；
 \item 数据：/var/lib 存储系统级数据， \$HOME/.local 存储用户级数据；
-\end{itemize}
-
-\section{计划}
-\begin{itemize}[leftmargin=4em]
-\item 2021.12 完成详细方案的设计和原型验证。
-\item 2022.06 完成方案的实现，初步完成基础系统 ostree 仓库搭建和维护。
-\item 2022.09 完成 V23 的基础系统构建，发布 Alpha 。
-\item 2022.12 完成方案中的缺陷修复、仓库的完善。
-\end{itemize}
-
-\section{风险}
-\begin{itemize}[leftmargin=4em]
-\item 人力风险：方案涉及多个项目，安装器、系统、DDE、备份还原等都需参与，需要人力调研和维护。另外需要修改软件的配置、缓存和数据默认存储目录，工作量大。
-\item 技术风险：此方案未全部验证，可能需要基于 ostree 进行二次开发，会影响方案的实施。
-\item 生态风险：差异化组件的维护需要第三方维护，其接受程度未知。
 \end{itemize}
 
 \end{document}
