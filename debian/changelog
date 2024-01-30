@@ -1,3 +1,9 @@
+deepin-upgrade-manager (1.0.25) unstable; urgency=medium
+
+  * bump version to 1.0.25
+
+ -- Lin Xin <linxin@deepin.org>  Tue, 30 Jan 2024 09:43:40 +0800
+
 deepin-upgrade-manager (1.0.24) unstable; urgency=medium
 
   * fix: conflict with deepin-system-upgrade in plymouth 
