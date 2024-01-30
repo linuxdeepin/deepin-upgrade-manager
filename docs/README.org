@@ -71,13 +71,6 @@
 
 #+latex: \newpage
 + [[./uos_partition_upgrade.tex][原子更新方案]]
-+ [[./core_flow.org][更新与回滚流程]]
-+ [[./usage.org][原子更新命令使用说明]]
 + [[./http_api.org][原子更新服务接口说明]]
 + [[./os_updgrade_file.org][原子更新描述文件说明]]
-+ [[./os_partition_requirement.org][原子更新分区挂载要求]]
-+ [[./deb_compatibility.tex][deb 兼容方案]]
-+ [[./build_rootfs_repo.tex][Rootfs Repo 构建说明]]
-+ [[./build_iso_from_rootfs_repo.org][ISO 构建说明]]
-+ [[./repo_intro.org][Repo 说明]]
-+ [[./deepin-FHS.tex][Deepin FHS]]
++ [[./Deepin-FHS.tex][Deepin FHS]]
