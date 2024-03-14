@@ -32,6 +32,7 @@ type RepoConfig struct {
 	ConfigDir      string `json:"config_dir"`
 	StageDir       string `json:"stage_dir"`
 	AfterRun       string `json:"Afer_Run"`
+	PlymouthTheme  string `json:"Plymouth_Theme"`
 
 	SubscribeList []string `json:"subscribe_list"`
 	FilterList    []string `json:"filter_list"`
@@ -200,6 +201,7 @@ func (c *Config) LoadData(path string) {
 	c.AppendCommit(dataCf.Target.Backup_list, true)
 	c.AppendFilter(dataCf.Target.Hold_list, true)
 	c.RepoList[0].AfterRun = dataCf.Target.After_run
+	c.RepoList[0].PlymouthTheme = dataCf.Target.Plymouth_theme
 	const versionManager = "/var/lib/deepin-boot-kit"
 	for _, v := range c.RepoList[0].SubscribeList {
 		if strings.HasPrefix(c.RepoList[0].RepoMountPoint, v) {
