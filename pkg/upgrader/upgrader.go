@@ -219,7 +219,7 @@ func NewUpgrader(conf *config.Config,
 	return &info, nil
 }
 
-func setPlymouthTheme() error {
+func setPlymouthTheme(theme string) error {
 	path := "/var/cache/system-rollback-theme"
 	if _, err := os.Stat(path); err != nil {
 		err = os.Mkdir(path, 0755)
@@ -249,7 +249,7 @@ func setPlymouthTheme() error {
 	if err != nil {
 		return err
 	}
-	out, err := exec.Command("/usr/sbin/plymouth-set-default-theme", "-R", "deepin-recovery").CombinedOutput()
+	out, err := exec.Command("/usr/sbin/plymouth-set-default-theme", "-R", theme).CombinedOutput()
 	if err != nil {
 		logger.Warning("failed to set upgrade plymouth theme:", string(out))
 		return err
@@ -347,6 +347,7 @@ func (c *Upgrader) Commit(newVersion, subject string, useSysData bool,
 	evHandler func(op, state int32, target, desc string)) (excode int, err error) {
 	exitCode := _STATE_TY_SUCCESS
 	var isClean bool
+	var theme string
 	c.SendingSignal(evHandler, _OP_TY_COMMIT_START, _STATE_TY_RUNING, newVersion, "")
 
 	if len(newVersion) == 0 {
@@ -366,7 +367,11 @@ func (c *Upgrader) Commit(newVersion, subject string, useSysData bool,
 		subject = fmt.Sprintf("Release %s", newVersion)
 	}
 	logger.Info("the version number of this submission is:", newVersion)
-	err = setPlymouthTheme()
+	theme = c.conf.RepoList[0].PlymouthTheme
+	if len(theme) == 0 {
+		theme = "deepin-recovery"
+	}
+	err = setPlymouthTheme(theme)
 	if err != nil {
 		logger.Warning("failed to set plymouth theme:", err)
 	}
@@ -1556,21 +1561,12 @@ func (c *Upgrader) AfterRollbackOper(backVersion string, isSuccessful bool) erro
 }
 
 func (c *Upgrader) UpdateProgress(progress int) {
-	upgrade_tool_theme := "/usr/share/plymouth/themes/deepin-recovery"
-	var theme progressTheme
-	if util.IsExists(upgrade_tool_theme) {
-		theme = _UPGRADE_TOOL
-	} else {
-		theme = _NO_THEME
-	}
-	if theme == _UPGRADE_TOOL {
-		if progress == 0 {
-			logger.Debugf("activate the upgrade roll back progress theme")
-			util.ExecCommand("/usr/bin/plymouth", []string{"change-mode", "--system-upgrade"})
-		}
-		logger.Infof("update progress %d", progress)
-		plymouth.UpdateProgress(progress)
-	}
+    if progress == 0 {
+    	logger.Debugf("activate the upgrade roll back progress theme")
+    	util.ExecCommand("/usr/bin/plymouth", []string{"change-mode", "--system-upgrade"})
+    }
+    logger.Infof("update progress %d", progress)
+    plymouth.UpdateProgress(progress)
 	fmt.Println("update progress:", progress)
 }
 

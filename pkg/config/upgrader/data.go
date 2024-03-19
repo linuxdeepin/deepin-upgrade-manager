@@ -14,6 +14,7 @@ type Target struct {
 	Backup_list []string `yaml:"backup_list"`
 	Hold_list   []string `yaml:"hold_list"`
 	After_run   string   `yaml:"after_run"`
+	Plymouth_theme string `yaml:"plymouth_theme"`
 }
 
 type CommitTarget struct {
