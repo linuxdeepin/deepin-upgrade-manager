@@ -5,7 +5,7 @@
   "cache_dir": "/usr/.osrepo-cache",
   "auto_cleanup": true,
   "max_repo_retention": 3,
-  "max_version_retention": 5,
+  "max_version_retention": 2,
   "repo_list": [
     {
       "repo_mount_point":"/persistent",
