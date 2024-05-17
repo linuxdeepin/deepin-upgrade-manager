@@ -1,3 +1,22 @@
+deepin-upgrade-manager (1.0.27) unstable; urgency=medium
+
+  * Reduced MaxVersionRetention from 5 to 2.
+    Previously, with MaxVersionRetention set to 5, the /boot/ partition could
+    retain up to 5 versions of kernel and initramfs files. Assuming each
+    version's kernel and initramfs files together occupy 100MB, this would
+    result in:
+
+    5 versions × 3 kernels × 100 MB = 1.5 GB
+
+    Given that our default /boot partition size is 1.5GB, this configuration
+    would lead to insufficient space, causing update failures and other
+    issues.
+
+    This change helps prevent the /boot/ partition from running out of space
+    by limiting the number of retained kernel and initramfs versions.
+
+ -- Tianyu Chen <sweetyfish@deepin.org>  Thu, 16 May 2024 17:41:46 +0800
+
 deepin-upgrade-manager (1.0.26) unstable; urgency=medium
 
   * Allow customizing theme
